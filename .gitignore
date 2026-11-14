@@ -1,0 +1,13 @@
+# Dependencies and build output (Docker builds the app itself)
+frontend/node_modules/
+app/
+
+# Secrets and database dumps — never push these
+.env
+*.sql
+
+# Editor / OS files
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

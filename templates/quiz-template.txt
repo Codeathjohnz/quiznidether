@@ -1,0 +1,55 @@
+# ==============================================================
+#  QUIZ NI DETHER - QUESTIONNAIRE TEMPLATE
+#  Save as .txt (or .docx) and upload it in: Questions > Import.
+#  Lines starting with # are ignored.
+# ==============================================================
+#
+#  RULES
+#  * Every question starts with a number:          1. Question text
+#  * Multiple choice: each choice starts with a letter (A to H):
+#                                                   A. Choice text
+#  * Every question needs an answer line:           ANSWER: ...
+#      - Multiple choice -> the letter              ANSWER: B
+#      - True or False   -> True or False           ANSWER: False
+#      - Identification  -> the answer. Separate other accepted
+#                           answers with |          ANSWER: RAM | Random Access Memory
+#  * Optional:  POINTS: 2        (default is 1 point)
+#  * Optional:  TIME: 45 sec     (this question's own timer: 30 sec, 1 min, 1:30)
+#               Without it, the question uses the quiz's time per question.
+#  * Optional:  TYPE: Multiple Choice / True or False / Identification
+#               (normally detected automatically)
+#  * Group questions with headings like:            TEST II. TRUE OR FALSE
+#  * Instead of ANSWER lines you may put an answer key at the very end:
+#        ANSWER KEY
+#        1. B
+#        2. True
+#        3. Charles Babbage | Babbage
+# ==============================================================
+
+TEST I. MULTIPLE CHOICE
+
+1. What does CPU stand for?
+A. Central Processing Unit
+B. Computer Personal Unit
+C. Central Program Utility
+D. Control Processing Unit
+ANSWER: A
+
+2. Which of the following is an input device?
+A. Monitor
+B. Printer
+C. Keyboard
+D. Speaker
+ANSWER: C
+POINTS: 2
+TIME: 45 sec
+
+TEST II. TRUE OR FALSE
+
+3. RAM keeps its data even when the computer is turned off.
+ANSWER: False
+
+TEST III. IDENTIFICATION
+
+4. He is known as the "Father of the Computer".
+ANSWER: Charles Babbage | Babbage

@@ -1,0 +1,8 @@
+.git
+.gitignore
+.env
+*.sql
+frontend/node_modules
+app
+README.md
+DEPLOY.md
