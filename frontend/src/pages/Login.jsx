@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../api';
+import { api, trackVisit } from '../api';
 import { Alert, Loading, useToast } from '../components/ui';
 import Logo from '../components/Logo';
 import Mascot from '../components/Mascot';
@@ -22,6 +22,7 @@ export default function Login() {
     api('auth.status')
       .then((r) => {
         if (r.user) return navigate('/', { replace: true });
+        trackVisit('login');
         setStatus(r);
         if (!r.hasAccounts) setMode('signup');
       })

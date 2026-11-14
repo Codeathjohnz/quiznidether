@@ -29,7 +29,10 @@ function nav_counts(PDO $db): array
 function h_nav(PDO $db): void
 {
     admin_guard();
-    out(nav_counts($db));
+    $me = current_admin($db);
+    $extra = ['reviewNeeded' => review_needed($db, $me)];
+    if (is_developer($db, $me)) $extra['newReviews'] = (int)$db->query("SELECT COUNT(*) FROM reviews WHERE status = 'new'")->fetchColumn();
+    out(nav_counts($db) + $extra);
 }
 
 function h_dashboard(PDO $db): void

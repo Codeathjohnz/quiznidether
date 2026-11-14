@@ -41,6 +41,21 @@ export function apiUrl(action, params = {}) {
   return `${API_URL}?${qs.toString()}`;
 }
 
+/** Counts a visit for the developer dashboard (an anonymous random id per browser, never personal data). */
+export function trackVisit(area, path = '') {
+  let vid = '';
+  try {
+    vid = localStorage.getItem('qnd_vid') || '';
+    if (!/^[a-z0-9]{16,64}$/.test(vid)) {
+      vid = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 32);
+      localStorage.setItem('qnd_vid', vid);
+    }
+  } catch {
+    vid = Math.random().toString(36).slice(2).padEnd(16, '0');
+  }
+  api('track.visit', { area, path, vid }).catch(() => {});
+}
+
 /** Fire-and-forget request that survives the page closing (used for terminations). */
 export function beacon(action, data) {
   const fd = new FormData();

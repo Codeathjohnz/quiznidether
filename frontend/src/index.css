@@ -625,3 +625,93 @@ td.reason { min-width: 220px; }
   .filters select, .filters input { min-width: 0; width: 100%; }
   .hero { flex-direction: column; text-align: center; }
 }
+
+/* ---------- reviews ---------- */
+.req { color: var(--danger, #ff4d6d); }
+.star-picker { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 4px 0 14px; }
+.star-picker button { background: none; border: 0; padding: 0 2px; font-size: 2.1rem; line-height: 1; cursor: pointer; color: #e3dcf5; transition: transform .12s, color .12s; }
+.star-picker button.on { color: var(--yellow); text-shadow: 0 3px 0 var(--yellow-dark); }
+.star-picker button:hover { transform: scale(1.18) rotate(-6deg); }
+.star-picker button:focus-visible { outline: 3px solid var(--primary); border-radius: 8px; }
+.star-word { margin-left: 8px; font-weight: 600; color: var(--ink-2); }
+.stars-static { color: var(--yellow-dark); letter-spacing: 1px; white-space: nowrap; }
+.stars-static .off { color: #e3dcf5; }
+.review-item { border: 3px solid var(--border); border-radius: 18px; padding: 12px 16px; margin-bottom: 12px; background: #fff; }
+.review-item.is-new { border-color: var(--primary); background: #fbf9ff; }
+.review-item p { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.review-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.review-suggestion { background: #fff8dc; border: 2px dashed #fbdb93; border-radius: 12px; padding: 6px 10px; }
+.clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.review-modal { text-align: left; max-height: calc(100vh - 60px); overflow-y: auto; }
+.review-modal > .mascot, .review-modal > svg { display: block; margin: 0 auto 4px; }
+.review-modal h2 { color: var(--primary-dark); text-align: center; }
+.student-review { text-align: left; border-top: 3px dashed var(--border); margin-top: 18px; padding-top: 14px; }
+.student-review h3 { margin: 0 0 2px; text-align: center; }
+.student-review > p { text-align: center; }
+
+/* ---------- developer dashboard ---------- */
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+.tabs button { font: 600 .95rem var(--font); padding: 9px 16px; border-radius: 14px; border: 3px solid var(--line); background: #fff; color: var(--ink-2); cursor: pointer; box-shadow: 0 3px 0 var(--line); }
+.tabs button.active { background: var(--yellow); border-color: var(--ink); color: var(--ink); box-shadow: 0 3px 0 var(--ink); }
+.user-cell { display: flex; gap: 10px; align-items: center; min-width: 200px; }
+.rating-big { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.rating-big > b { font: 400 2.6rem/1 var(--font-game); color: var(--ink); }
+.rating-big .stars-static { font-size: 1.3rem; }
+.hbars { display: grid; gap: 10px; }
+.hbar { display: grid; grid-template-columns: minmax(90px, 160px) 1fr 40px; align-items: center; gap: 10px; font-size: .92rem; }
+.hbar-label { color: var(--ink-2); font-weight: 500; }
+.hbar-track { height: 14px; background: #f3effc; border-radius: 4px; overflow: hidden; }
+.hbar-fill { display: block; height: 100%; min-width: 2px; background: var(--primary); border-radius: 0 4px 4px 0; transition: width .5s ease; }
+.hbar-n { text-align: right; color: var(--ink); }
+.vchart { position: relative; padding-left: 30px; }
+.vchart-grid { position: absolute; inset: 0 0 24px 30px; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
+.vchart-grid div { border-top: 1px solid #eee8fb; position: relative; height: 0; }
+.vchart-grid div:last-child { border-top: 2px solid var(--line); }
+.vchart-grid span { position: absolute; left: -30px; top: -9px; width: 24px; text-align: right; font-size: .72rem; color: var(--muted); }
+.vchart-bars { height: 190px; display: flex; align-items: flex-end; gap: 6px; position: relative; }
+.vchart-col { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; position: relative; cursor: default; outline: none; }
+.vchart-col::before { content: ''; position: absolute; inset: 0 -3px; border-radius: 6px; }
+.vchart-col.is-hover::before, .vchart-col:focus-visible::before { background: rgba(124, 77, 255, .07); }
+.vchart-bar { width: 100%; max-width: 30px; min-height: 0; background: var(--primary); border-radius: 4px 4px 0 0; transition: height .5s ease; position: relative; }
+.vchart-col.is-hover .vchart-bar { background: var(--primary-dark); }
+.vchart-val { font-size: .78rem; font-weight: 700; color: var(--ink); margin-bottom: 3px; }
+.vchart-tip { position: absolute; bottom: calc(100% - 30px); left: 50%; transform: translateX(-50%); z-index: 5; background: #fff; border: 2px solid var(--ink); border-radius: 12px; box-shadow: 0 4px 0 var(--ink); padding: 8px 10px; font-size: .8rem; white-space: nowrap; min-width: 150px; pointer-events: none; }
+.vchart-tip.left { left: auto; right: 0; transform: none; }
+.vchart-tip > div { display: flex; justify-content: space-between; gap: 12px; color: var(--ink-2); }
+.vchart-x { display: flex; gap: 6px; height: 24px; align-items: flex-end; }
+.vchart-x span { flex: 1; text-align: center; font-size: .7rem; color: var(--muted); white-space: nowrap; }
+
+/* ---------- first-time guide (tour) ---------- */
+.foot-links { display: flex; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.tour { position: fixed; inset: 0; z-index: 900; }
+.tour-block { position: absolute; inset: 0; }
+.tour-dim { position: absolute; inset: 0; background: rgba(45, 27, 78, .55); animation: fade-in .25s ease both; }
+.tour-spot { position: fixed; border-radius: 16px; box-shadow: 0 0 0 4px var(--yellow), 0 0 0 9999px rgba(45, 27, 78, .55); pointer-events: none; transition: all .35s cubic-bezier(.3, 1.3, .5, 1); animation: tour-pulse 1.6s ease-in-out infinite; }
+@keyframes tour-pulse { 50% { box-shadow: 0 0 0 7px var(--yellow), 0 0 0 9999px rgba(45, 27, 78, .55); } }
+.tour-bubble { position: fixed; display: flex; align-items: flex-end; gap: 4px; width: min(420px, calc(100vw - 20px)); animation: pop-in .4s cubic-bezier(.2, 1.4, .4, 1) both; }
+.tour-mascot { flex-shrink: 0; animation: tour-bob 2.4s ease-in-out infinite; }
+@keyframes tour-bob { 50% { transform: translateY(-6px) rotate(-3deg); } }
+.tour-balloon { position: relative; flex: 1; background: #fff; color: var(--ink); border: 3px solid var(--ink); border-radius: 20px; box-shadow: 0 5px 0 var(--ink); padding: 14px 16px 12px; }
+.tour-balloon h3 { font: 400 1.3rem/1.15 var(--font-game); letter-spacing: .03em; color: var(--primary-dark); margin: 2px 0 6px; }
+.tour-balloon p { margin: 0 0 10px; font-size: .95rem; line-height: 1.45; }
+.tour-step { font-size: .7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--pink); }
+.tour-dots { display: flex; gap: 5px; margin-bottom: 10px; flex-wrap: wrap; }
+.tour-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: all .2s; }
+.tour-dots i.done { background: var(--primary); }
+.tour-dots i.now { background: var(--yellow); outline: 2px solid var(--ink); transform: scale(1.3); }
+.tour-actions { display: flex; align-items: center; gap: 8px; }
+.tour-actions .spacer { flex: 1; }
+.tour-tail { position: absolute; width: 18px; height: 18px; background: #fff; border: 3px solid var(--ink); transform: rotate(45deg); }
+.tour-tail.tail-left { left: -11px; margin-top: -9px; border-top-color: transparent; border-right-color: transparent; }
+.tour-tail.tail-top { top: -11px; margin-left: -9px; border-bottom-color: transparent; border-right-color: transparent; }
+.tour-tail.tail-bottom { bottom: -11px; margin-left: -9px; border-top-color: transparent; border-left-color: transparent; }
+.side-left .tour-mascot, .side-top .tour-mascot, .side-bottom .tour-mascot { order: 2; }
+@media (max-width: 600px) {
+  .tour-mascot svg { width: 64px; height: auto; }
+  .hbar { grid-template-columns: 90px 1fr 34px; }
+  .vchart-bars, .vchart-x { gap: 3px; }
+  .star-picker button { font-size: 1.8rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-spot, .tour-mascot { animation: none; }
+}

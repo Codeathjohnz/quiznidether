@@ -48,9 +48,16 @@ function db(): PDO
 function migrate_schema(PDO $pdo): void
 {
     $hasCol = fn(string $table, string $col) => (bool)$pdo->query("SHOW COLUMNS FROM `$table` LIKE '$col'")->fetch();
-    if ($hasCol('admins', 'email') && $hasCol('quizzes', 'time_unit') && $hasCol('quizzes', 'timer_mode')) return;
+    $hasTable = fn(string $table) => (bool)$pdo->query("SHOW TABLES LIKE '$table'")->fetch();
+    if ($hasCol('admins', 'email') && $hasCol('quizzes', 'time_unit') && $hasCol('quizzes', 'timer_mode') && $hasTable('reviews') && $hasCol('admins', 'tour_done')) return;
     $pdo->query("SELECT GET_LOCK('qnd_migrate', 30)");
     try {
+        // v5: visit tracking + reviews/suggestions for the developer dashboard.
+        if (!$hasTable('reviews')) foreach (feedback_tables() as $s) $pdo->exec($s);
+        // v6: first-time guide (tour) shown once per teacher.
+        if (!$hasCol('admins', 'tour_done')) {
+            $pdo->exec('ALTER TABLE admins ADD tour_done TINYINT(1) NOT NULL DEFAULT 0 AFTER last_login_at');
+        }
         // v4: per-question timer (one question at a time, each with its own countdown).
         if (!$hasCol('quizzes', 'timer_mode') && $hasCol('quizzes', 'time_unit')) {
             $pdo->exec("ALTER TABLE quizzes ADD timer_mode ENUM('whole','per_question') NOT NULL DEFAULT 'whole' AFTER time_unit");
@@ -103,6 +110,7 @@ function install_schema(PDO $pdo): void
             google_sub VARCHAR(64) NULL UNIQUE,
             avatar_url VARCHAR(500) NULL,
             last_login_at DATETIME NULL,
+            tour_done TINYINT(1) NOT NULL DEFAULT 0,
             created_at DATETIME NOT NULL
         ) ENGINE=InnoDB",
 
@@ -199,5 +207,41 @@ function install_schema(PDO $pdo): void
             CONSTRAINT fk_answer_question FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
         ) ENGINE=InnoDB",
     ];
-    foreach ($sql as $s) $pdo->exec($s);
+    foreach (array_merge($sql, feedback_tables()) as $s) $pdo->exec($s);
+}
+
+/** Visits (who opened the site) and reviews (rating + comment + suggestion from teachers and students). */
+function feedback_tables(): array
+{
+    return [
+        "CREATE TABLE IF NOT EXISTS visits (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            visitor CHAR(40) NOT NULL,
+            area ENUM('login','teacher','student') NOT NULL,
+            path VARCHAR(190) NULL,
+            admin_id INT NULL,
+            device ENUM('phone','tablet','computer') NOT NULL DEFAULT 'computer',
+            visited_at DATETIME NOT NULL,
+            INDEX idx_visit_time (visited_at),
+            INDEX idx_visit_visitor (visitor, area, visited_at)
+        ) ENGINE=InnoDB",
+
+        "CREATE TABLE IF NOT EXISTS reviews (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            role ENUM('teacher','student') NOT NULL,
+            admin_id INT NULL UNIQUE,
+            attempt_id INT NULL UNIQUE,
+            name VARCHAR(150) NOT NULL,
+            detail VARCHAR(190) NULL,
+            rating TINYINT NOT NULL,
+            comment TEXT NOT NULL,
+            suggestion TEXT NULL,
+            status ENUM('new','read','done') NOT NULL DEFAULT 'new',
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            INDEX idx_review_time (created_at),
+            CONSTRAINT fk_review_admin FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE CASCADE,
+            CONSTRAINT fk_review_attempt FOREIGN KEY (attempt_id) REFERENCES attempts(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB",
+    ];
 }

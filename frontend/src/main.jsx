@@ -18,6 +18,8 @@ import Results from './pages/Results';
 import AttemptDetail from './pages/AttemptDetail';
 import Account from './pages/Account';
 import TakeQuiz from './pages/TakeQuiz';
+import Feedback from './pages/Feedback';
+import Developer from './pages/Developer';
 createRoot(document.getElementById('root')).render(
   <ToastProvider>
     <HashRouter>
@@ -33,7 +35,10 @@ createRoot(document.getElementById('root')).render(
           <Route path="quizzes/:id/questions" element={<Questions />} />
           <Route path="results" element={<Results />} />
           <Route path="attempts/:id" element={<AttemptDetail />} />
-          <Route path="account" element={<Account />} />        </Route>
+          <Route path="account" element={<Account />} />
+          <Route path="feedback" element={<Feedback />} />
+          <Route path="developer" element={<Developer />} />
+        </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </HashRouter>

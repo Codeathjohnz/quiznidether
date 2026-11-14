@@ -36,7 +36,17 @@ function user_payload(array $a): array
         'avatar' => $a['avatar_url'],
         'has_password' => !empty($a['password_hash']),
         'google_linked' => !empty($a['google_sub']),
+        'is_developer' => is_developer(db(), $a),
+        'tour_done' => !empty($a['tour_done']),
     ];
+}
+
+/** The first-time guide was finished or skipped: don't show it again (on any device). */
+function h_auth_tour_done(PDO $db): void
+{
+    admin_guard();
+    $db->prepare('UPDATE admins SET tour_done = ? WHERE id = ?')->execute([bool_in('reset') ? 0 : 1, uid()]);
+    out([]);
 }
 
 function login_as(PDO $db, array $admin): void
@@ -117,6 +127,7 @@ function h_auth_status(PDO $db): void
     $count = account_count($db);
     out([
         'user' => $me ? user_payload($me) : null,
+        'reviewNeeded' => $me ? review_needed($db, $me) : false,
         'hasAccounts' => $count > 0,
         'allowSignup' => ALLOW_SIGNUP || $count === 0,
         'googleClientId' => GOOGLE_CLIENT_ID,

@@ -23,6 +23,13 @@ set the environment variables, add your domain with HTTPS, deploy.
 - Google only allows `localhost` or `https://` sites, so teachers use Google sign-in on the XAMPP computer.
   On other devices (`http://192.168…`) they log in with email + password. Students never need to log in.
 
+## Guide, reviews and the Developer dashboard
+- **First-time guide** — new teachers get a tour where Dethy points at each menu item. Replay it with **❓ Guide** (bottom of the sidebar).
+- **Reviews** — after making their first quiz/exam, every teacher must leave a star rating + comment (suggestion optional).
+  They can edit it under **Review & Suggest**. Students can rate the system on the screen after they finish.
+- **Developer dashboard** (menu **Developer**) — visits per day, devices, all teacher accounts, and every review/suggestion
+  (mark as read / done, delete). The developer is the first account created, or the emails in `DEVELOPER_EMAILS`.
+
 ## Importing a questionnaire (TQ)
 On a quiz's **Questions** page click **📥 Import TQ**:
 1. Download the template (also in `templates/quiz-template.txt`) or copy the ready-made **AI prompt**,

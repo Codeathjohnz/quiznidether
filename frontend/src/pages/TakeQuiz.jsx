@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { api, beacon } from '../api';
+import { api, beacon, trackVisit } from '../api';
+import ReviewForm from '../components/ReviewForm';
 import { Alert, BouncyLoader, Modal, useToast } from '../components/ui';
 import Logo from '../components/Logo';
 import Mascot from '../components/Mascot';
@@ -45,6 +46,21 @@ function Message({ mood, title, children, className = '', confetti = false }) {
           {children}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Rating + comment (+ optional suggestion) about the system, shown after finishing. */
+function StudentReview({ token }) {
+  const [sent, setSent] = useState(false);
+  if (!token) return null;
+  if (sent) return <div className="alert alert-success">Thanks for your feedback! 💜</div>;
+  return (
+    <div className="student-review">
+      <h3>Rate Quiz ni Dether ⭐</h3>
+      <p className="muted small">Tell us how it was to take your quiz/exam here (not about your score).</p>
+      <ReviewForm who="student" submitLabel="Send feedback"
+        onSubmit={async (v) => { await api('take.review', { token, ...v }); setSent(true); }} />
     </div>
   );
 }
@@ -293,6 +309,7 @@ export default function TakeQuiz() {
     api('take.info', { code })
       .then(async (r) => {
         if (cancelled) return;
+        trackVisit('student', `/take/${code}`);
         setInfo(r.quiz);
         reasons.current = r.reasons;
         let prior = null;
@@ -482,6 +499,7 @@ export default function TakeQuiz() {
             <div className="muted small">Passing score: {result.passing}%</div>
           </div>
         )}
+        <StudentReview token={st.current.token} />
         <p className="muted small">You may now close this tab.</p>
       </Message>
     );

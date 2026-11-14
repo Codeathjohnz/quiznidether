@@ -39,6 +39,12 @@ define('ALLOW_SIGNUP', env_value('ALLOW_SIGNUP', true));
 // Only allow these email domains to sign up, comma separated (e.g. 'gmail.com,myschool.edu.ph'). Empty = any.
 define('ALLOWED_EMAIL_DOMAINS', env_value('ALLOWED_EMAIL_DOMAINS', ''));
 
+/*
+ * Developer accounts: can open the Developer dashboard (visits, users, reviews and suggestions).
+ * Comma-separated emails, e.g. 'me@gmail.com'. Empty = the very first account created is the developer.
+ */
+define('DEVELOPER_EMAILS', env_value('DEVELOPER_EMAILS', ''));
+
 // Passing percentage used when a quiz's passing mode is set to "Automatic".
 define('AUTO_PASSING_PERCENT', env_value('AUTO_PASSING_PERCENT', 75));
 

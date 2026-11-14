@@ -132,6 +132,7 @@ the `quiz-db` **Terminal** / server SSH and import it with
 | `APP_TIMEZONE` | `Asia/Manila` | Time zone for start/finish times |
 | `GOOGLE_CLIENT_ID` | empty | Enables "Continue with Google" |
 | `ALLOW_SIGNUP` | `true` | Let new teachers sign up |
+| `DEVELOPER_EMAILS` | empty (= first account) | Who can open the Developer dashboard, e.g. `me@gmail.com` |
 | `ALLOWED_EMAIL_DOMAINS` | empty | e.g. `gmail.com,myschool.edu.ph` |
 | `AUTO_PASSING_PERCENT` | `75` | Passing % for "Automatic" mode |
 | `HEARTBEAT_TIMEOUT` | `45` | Seconds before a silent (force-closed) quiz is terminated |

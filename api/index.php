@@ -9,6 +9,7 @@ require __DIR__ . '/auth.php';
 require __DIR__ . '/admin.php';
 require __DIR__ . '/import.php';
 require __DIR__ . '/student.php';
+require __DIR__ . '/dev.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -22,6 +23,16 @@ $routes = [
     'auth.unlink_google' => 'h_auth_unlink_google',
     'auth.logout'      => 'h_auth_logout',
     'auth.account'     => 'h_auth_account',
+    'auth.tour_done'   => 'h_auth_tour_done',
+    // visits, reviews, developer dashboard
+    'track.visit'      => 'h_track_visit',
+    'review.mine'      => 'h_review_mine',
+    'review.save'      => 'h_review_save',
+    'dev.overview'     => 'h_dev_overview',
+    'dev.users'        => 'h_dev_users',
+    'dev.reviews'      => 'h_dev_reviews',
+    'dev.review_status' => 'h_dev_review_status',
+    'dev.review_delete' => 'h_dev_review_delete',
     // admin
     'nav'              => 'h_nav',
     'dashboard'        => 'h_dashboard',
@@ -53,6 +64,7 @@ $routes = [
     'take.status'      => 'h_take_status',
     'take.submit'      => 'h_take_submit',
     'take.terminate'   => 'h_take_terminate',
+    'take.review'      => 'h_take_review',
 ];
 
 $action = (string)($_GET['action'] ?? '');
