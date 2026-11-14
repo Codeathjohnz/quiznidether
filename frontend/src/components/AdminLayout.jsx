@@ -47,6 +47,10 @@ export default function AdminLayout() {
   const [counts, setCounts] = useState({ unseen: 0, live: 0 });
   const [reviewNeeded, setReviewNeeded] = useState(false);
   const [touring, setTouring] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false); // phone menu drawer
+
+  // Close the phone menu after choosing a page.
+  useEffect(() => setMenuOpen(false), [location.pathname, location.search]);
 
   useEffect(() => {
     api('auth.status')
@@ -118,10 +122,18 @@ export default function AdminLayout() {
 
   return (
     <div className="layout">
-      <aside className="sidebar">
-        <NavLink className="brand" to="/">
-          <Logo size="sm" />
-        </NavLink>
+      <aside className={`sidebar ${menuOpen || touring ? 'menu-open' : ''}`}>
+        <div className="sidebar-top">
+          <NavLink className="brand" to="/">
+            <Logo size="sm" />
+          </NavLink>
+          <button type="button" className="menu-btn" aria-label={menuOpen ? 'Close menu' : 'Open menu'} aria-expanded={menuOpen}
+            onClick={() => setMenuOpen(!menuOpen)}>
+            {menuOpen ? '✕' : '☰'}
+            {!menuOpen && (counts.unseen > 0 || counts.newReviews > 0) && <span className="menu-dot" />}
+          </button>
+        </div>
+        <div className="sidebar-body">
         <nav>
           {links.map((l) => (
             <NavLink
@@ -156,7 +168,9 @@ export default function AdminLayout() {
             <button className="link-btn" onClick={logout}>Log out</button>
           </div>
         </div>
+        </div>
       </aside>
+      {menuOpen && <div className="menu-backdrop" onClick={() => setMenuOpen(false)} />}
       <main className="main">
         <Outlet context={{ user, setUser, refreshNav, config, setReviewNeeded }} />
       </main>
