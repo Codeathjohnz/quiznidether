@@ -96,10 +96,10 @@ function http_get(string $url): ?string
 /** Verifies a Google ID token (from "Sign in with Google") with Google and returns its claims. */
 function verify_google_token(string $jwt): array
 {
-    if (GOOGLE_CLIENT_ID === '') fail('Google sign-in is not set up yet. Add GOOGLE_CLIENT_ID in includes/config.php.');
+    if (GOOGLE_CLIENT_ID === '') fail('Google sign-in is not set up yet. Set GOOGLE_CLIENT_ID (Dokploy Environment, or includes/config.php on XAMPP).');
     if ($jwt === '' || substr_count($jwt, '.') !== 2) fail('Google sign-in failed. Please try again.', 401);
     $body = http_get('https://oauth2.googleapis.com/tokeninfo?id_token=' . rawurlencode($jwt));
-    if ($body === null) fail('Could not reach Google to verify your sign-in. Check the internet connection of the computer running XAMPP.');
+    if ($body === null) fail('Could not reach Google to verify your sign-in. Check the server\'s internet connection and try again.');
     $t = json_decode($body, true);
     if (!is_array($t) || isset($t['error']) || isset($t['error_description'])) fail('Google sign-in failed: the sign-in token is invalid.', 401);
     if (($t['aud'] ?? '') !== GOOGLE_CLIENT_ID) fail('Google sign-in failed: the token was issued for a different app.', 401);
