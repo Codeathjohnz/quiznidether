@@ -31,7 +31,7 @@ define('DB_NAME', env_value('DB_NAME', 'quiz_ni_dether'));
  *   4. Put the Client ID in GOOGLE_CLIENT_ID (looks like 1234-abc.apps.googleusercontent.com)
  * Leave it empty to hide the Google button (email + password sign-up still works).
  */
-define('GOOGLE_CLIENT_ID', env_value('GOOGLE_CLIENT_ID', ''));
+define('GOOGLE_CLIENT_ID', env_value('GOOGLE_CLIENT_ID', '344500915745-8578k3jia40euqp7le3q0d89d2em4ekt.apps.googleusercontent.com'));
 
 // Allow new teachers to create accounts from the login page.
 define('ALLOW_SIGNUP', env_value('ALLOW_SIGNUP', true));
