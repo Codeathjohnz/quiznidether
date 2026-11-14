@@ -6,6 +6,8 @@ const TERMINATION_REASONS = [
     'page_unload'     => 'Closed the quiz tab/window (clicked X) or reloaded the page',
     'reopened'        => 'Left the quiz and opened the quiz link again while the attempt was still running',
     'no_heartbeat'    => 'Connection lost or browser was force-closed (device stopped responding)',
+    'second_screen'   => 'Connected a second monitor / extended display during the quiz',
+    'window_resized'  => 'Made the quiz window smaller than the screen (split screen / snapped window)',
 ];
 
 function now(): string

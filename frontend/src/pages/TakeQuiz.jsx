@@ -30,7 +30,20 @@ function exitFs() {
 }
 
 // When several events fire together (e.g. blur + hidden), report the most specific one.
-const PRIORITY = ['page_unload', 'tab_hidden', 'fullscreen_exit', 'window_blur'];
+const PRIORITY = ['page_unload', 'second_screen', 'tab_hidden', 'fullscreen_exit', 'window_resized', 'window_blur'];
+
+/* ---------- one screen only ---------- */
+// Chrome / Edge tell a page when the computer uses more than one monitor (Firefox / Safari: unknown = allowed).
+const hasSecondScreen = () => window.screen && window.screen.isExtended === true;
+// Mouse-and-keyboard devices only: phones rotate and resize, so the size check would cause false alarms.
+const finePointer = () => window.matchMedia && window.matchMedia('(pointer: fine)').matches;
+// The full-screen window must really cover the screen (not snapped / split next to another window).
+const windowTooSmall = () => {
+  const sw = window.screen.width;
+  const sh = window.screen.height;
+  return !!sw && !!sh && (window.outerWidth < sw * 0.85 || window.outerHeight < sh * 0.85);
+};
+const SECOND_SCREEN_MSG = 'A second monitor is connected. Unplug it (or set Windows to show only one screen: press Windows key + P → "PC screen only"), then try again.';
 const BLOCKED_KEYS = ['r', 'p', 's', 'u', 'c', 'x', 'v', 'a', 'f', 'g'];
 
 function Message({ mood, title, children, className = '', confetti = false }) {
@@ -239,6 +252,12 @@ export default function TakeQuiz() {
 
   function tick() {
     const s = st.current;
+    if (s.monitoring && !s.ended) {
+      if (hasSecondScreen()) fn.current.violation('second_screen');
+      // A few seconds in a row, so a short resize while entering full screen is not counted.
+      s.smallTicks = s.fsRequired && fsElement() && finePointer() && windowTooSmall() ? (s.smallTicks || 0) + 1 : 0;
+      if (s.smallTicks >= 6) fn.current.violation('window_resized');
+    }
     const l = secondsLeft();
     setLeft(l);
     if (s.mode === 'per_question') {
@@ -388,6 +407,7 @@ export default function TakeQuiz() {
     if (name.length < 3 || !name.includes(' ')) err = 'Please enter your FULL name (first and last name).';
     else if (!form.section.trim()) err = 'Please enter your section.';
     else if (!form.agree) err = 'Please confirm that you have read the instructions and rules.';
+    else if (hasSecondScreen()) err = SECOND_SCREEN_MSG;
     setFormError(err);
     if (err) return;
     sfx.click();
@@ -396,6 +416,10 @@ export default function TakeQuiz() {
   };
 
   const startQuiz = async () => {
+    if (hasSecondScreen()) {
+      setStartError(SECOND_SCREEN_MSG);
+      return;
+    }
     setStarting(true);
     setStartError('');
     if (fsSupported) {
@@ -753,6 +777,8 @@ export default function TakeQuiz() {
               <li>🖥️ The quiz opens in <b>full screen</b>. Stay in full screen until you submit.</li>
               <li>🚫 <b>Do not</b> press <kbd>Esc</kbd> / <kbd>F11</kbd>, switch tabs, open a new tab, use <kbd>Alt</kbd>+<kbd>Tab</kbd>, minimize,
                 click outside the browser, reload, or close the window (<b>X</b>).</li>
+              <li>🖥️ Use <b>one screen only</b>. A second monitor is not allowed, and the quiz window must fill the whole screen
+                (no split screen or snapped windows).</li>
               <li>💥 Doing any of these will <b>immediately terminate</b> your quiz, and your teacher will see the exact reason.</li>
               {info.timer_mode === 'per_question' ? (
                 <li>⏱ Questions appear <b>one at a time</b>, each with its own timer. When the time runs out it moves to the
