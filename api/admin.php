@@ -256,7 +256,8 @@ function h_questions_list(PDO $db): void
     admin_guard();
     $quizId = int_in('quiz_id');
     $quiz = quiz_row(load_quiz($db, $quizId));
-    $st = $db->prepare('SELECT * FROM questions WHERE quiz_id = ? ORDER BY sort_order, id');
+    $st = $db->prepare('SELECT q.*, f.fkey AS figure FROM questions q LEFT JOIN figures f ON f.id = q.figure_id
+                        WHERE q.quiz_id = ? ORDER BY q.sort_order, q.id');
     $st->execute([$quizId]);
     $questions = $st->fetchAll();
     $choices = [];
@@ -273,6 +274,7 @@ function h_questions_list(PDO $db): void
             'id' => (int)$q['id'],
             'type' => $q['type'],
             'question' => $q['question'],
+            'figure' => $q['figure'],
             'points' => fmt_num($q['points']),
             'choices' => $choices[(int)$q['id']] ?? [],
             'tf_answer' => $q['type'] === 'tf' ? ($q['answer_text'] === 'false' ? 'false' : 'true') : 'true',
@@ -305,6 +307,9 @@ function h_questions_save(PDO $db): void
     [$qSecs, $qUnit] = bool_in('custom_time') ? timer_in('q_timer') : [null, null];
     $answerText = null;
     $choiceRows = [];
+    $figureKey = str_in('figure', 40);
+    $figureId = $figureKey !== '' ? figure_id_of($db, $figureKey) : null;
+    if ($figureId === 0) fail('The figure was not found. Please add the picture again.');
     if ($text === '') fail('Question text is required.');
     if ($points <= 0 || $points > 1000) fail('Points must be greater than 0.');
     if ($type === 'mcq') {
@@ -325,12 +330,12 @@ function h_questions_save(PDO $db): void
 
     $db->beginTransaction();
     if ($qid) {
-        $db->prepare('UPDATE questions SET type = ?, question = ?, answer_text = ?, points = ?, time_seconds = ?, time_unit = ? WHERE id = ?')
-           ->execute([$type, $text, $answerText, $points, $qSecs, $qUnit, $qid]);
+        $db->prepare('UPDATE questions SET type = ?, question = ?, answer_text = ?, figure_id = ?, points = ?, time_seconds = ?, time_unit = ? WHERE id = ?')
+           ->execute([$type, $text, $answerText, $figureId, $points, $qSecs, $qUnit, $qid]);
     } else {
         $max = scalar($db, 'SELECT COALESCE(MAX(sort_order), 0) FROM questions WHERE quiz_id = ?', [$quizId]);
-        $db->prepare('INSERT INTO questions (quiz_id, type, question, answer_text, points, time_seconds, time_unit, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-           ->execute([$quizId, $type, $text, $answerText, $points, $qSecs, $qUnit, $max + 1]);
+        $db->prepare('INSERT INTO questions (quiz_id, type, question, answer_text, figure_id, points, time_seconds, time_unit, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+           ->execute([$quizId, $type, $text, $answerText, $figureId, $points, $qSecs, $qUnit, $max + 1]);
         $qid = (int)$db->lastInsertId();
     }
     // Sync choices, keeping ids so earlier student answers stay linked.
@@ -481,7 +486,8 @@ function h_attempts_get(PDO $db): void
     $a = load_owned_attempt($db, $id);
     if ($a['status'] === 'terminated' && !$a['admin_seen']) $db->prepare('UPDATE attempts SET admin_seen = 1 WHERE id = ?')->execute([$id]);
 
-    $st = $db->prepare('SELECT * FROM questions WHERE quiz_id = ? ORDER BY sort_order, id');
+    $st = $db->prepare('SELECT q.*, f.fkey AS figure FROM questions q LEFT JOIN figures f ON f.id = q.figure_id
+                        WHERE q.quiz_id = ? ORDER BY q.sort_order, q.id');
     $st->execute([$a['quiz_id']]);
     $questions = $st->fetchAll();
     $choices = [];
@@ -515,6 +521,7 @@ function h_attempts_get(PDO $db): void
             'id' => $qid,
             'type' => $q['type'],
             'question' => $q['question'],
+            'figure' => $q['figure'],
             'points' => fmt_num($q['points']),
             'earned' => fmt_num($ans['points'] ?? 0),
             'state' => $ans === null || $givenText === null || $givenText === '' ? 'blank' : ($ans['is_correct'] ? 'right' : 'wrong'),

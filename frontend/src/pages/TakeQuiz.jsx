@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api, beacon, trackVisit } from '../api';
 import ReviewForm from '../components/ReviewForm';
+import Figure from '../components/Figure';
 import { Alert, BouncyLoader, Modal, useToast } from '../components/ui';
 import Logo from '../components/Logo';
 import Mascot from '../components/Mascot';
@@ -618,6 +619,7 @@ export default function TakeQuiz() {
               <span className="q-pts">⭐ {plural(q.points, 'pt')}</span>
             </div>
             <div className="q-text">{q.question}</div>
+            {q.figure && <Figure figureKey={q.figure} />}
             <div className="q-options">
               {q.type === 'text' ? (
                 <input className="q-input" type="text" maxLength={255} autoComplete="off" spellCheck={false} autoFocus
@@ -689,6 +691,7 @@ export default function TakeQuiz() {
                   <span className="q-pts">⭐ {plural(q.points, 'pt')}</span>
                 </div>
                 <div className="q-text">{q.question}</div>
+                {q.figure && <Figure figureKey={q.figure} />}
                 <div className="q-options">
                   {q.type === 'text' ? (
                     <input className="q-input" type="text" maxLength={255} autoComplete="off" spellCheck={false}

@@ -41,6 +41,13 @@ Format: `1. Question` · choices `A. …` · `ANSWER: B` / `ANSWER: True` / `ANS
 optional `POINTS: 2`, `TYPE: Identification`, section headings like `TEST II. TRUE OR FALSE`,
 or an `ANSWER KEY` list at the end instead of `ANSWER:` lines.
 
+**Figures (pictures / diagrams).** A question can show a figure to the students (tap to enlarge):
+- In the question form: **🖼 Add a picture** (PNG, JPG, GIF, WEBP, SVG — click, drop or Ctrl+V), or paste SVG code.
+- In a TQ: a `FIGURE:` line under the question, then an SVG drawing from `<svg …>` to `</svg>`.
+  Tick **🖼 Include figures** in the AI prompt and Claude draws graphs, shapes and diagrams this way.
+- Pictures inside a Word (`.docx`) TQ are imported as that question's figure automatically.
+Figures are stored in the database (table `figures`), so they survive redeploys. Big photos are shrunk in the browser (max ~900 KB).
+
 ## Develop the React app
 ```
 cd frontend

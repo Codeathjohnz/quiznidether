@@ -6,10 +6,12 @@ import { Alert, Loading, ShareLinks, useToast } from '../components/ui';
 import { TYPE_NAMES, timerValue } from '../utils';
 import ImportQuestions from '../components/ImportQuestions';
 import TimerInput from '../components/TimerInput';
+import Figure from '../components/Figure';
+import FigurePicker from '../components/FigurePicker';
 
 const blankChoices = (n = 4) => Array.from({ length: n }, () => ({ id: 0, text: '', correct: false }));
 const EMPTY = {
-  id: 0, type: 'mcq', question: '', points: '1', choices: blankChoices(), tf_answer: 'true', accepted: '',
+  id: 0, type: 'mcq', question: '', figure: '', points: '1', choices: blankChoices(), tf_answer: 'true', accepted: '',
   custom_time: false, q_timer_value: '', q_timer_unit: 'seconds',
 };
 
@@ -48,7 +50,7 @@ export default function Questions() {
   const edit = (q) => {
     setFormError('');
     setForm({
-      id: q.id, type: q.type, question: q.question, points: q.points,
+      id: q.id, type: q.type, question: q.question, figure: q.figure || '', points: q.points,
       choices: q.type === 'mcq' ? q.choices.map((c) => ({ ...c })) : blankChoices(),
       tf_answer: q.tf_answer, accepted: q.accepted.join('\n'),
       custom_time: q.custom_time, q_timer_value: timerValue(q.time_seconds, q.time_unit), q_timer_unit: q.time_unit,
@@ -145,6 +147,7 @@ export default function Questions() {
                 <button className="btn btn-sm btn-danger" onClick={() => remove(q, i)}>Delete</button>
               </div>
               <div className="question-text" style={{ whiteSpace: 'pre-wrap' }}>{q.question}</div>
+              {q.figure && <Figure figureKey={q.figure} small />}
               {q.type === 'mcq' && (
                 <ul className="choice-list">
                   {q.choices.map((c, j) => (
@@ -179,6 +182,7 @@ export default function Questions() {
           <label>Question
             <textarea rows={3} required value={form.question} onChange={set('question')} placeholder="Type the question…" />
           </label>
+          <FigurePicker value={form.figure} onChange={(figure) => setForm((f) => ({ ...f, figure }))} />
 
           {form.type === 'mcq' && (
             <div>

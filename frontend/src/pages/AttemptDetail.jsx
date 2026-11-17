@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useOutletContext, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { PageHeader } from '../components/AdminLayout';
+import Figure from '../components/Figure';
 import { Alert, Loading, ResultBadge } from '../components/ui';
 import { fmtDt, fmtDuration } from '../utils';
 
@@ -63,6 +64,7 @@ export default function AttemptDetail() {
             <span className="chip">{q.earned} / {q.points} pts</span>
           </div>
           <div className="question-text" style={{ whiteSpace: 'pre-wrap' }}>{q.question}</div>
+          {q.figure && <Figure figureKey={q.figure} small />}
           <p className="answer-line">Student's answer: <b>{q.given ? q.given : <span className="muted">(none)</span>}</b></p>
           {q.state !== 'right' && <p className="answer-line">Correct answer: <b>{q.correct}</b></p>}
         </article>

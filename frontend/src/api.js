@@ -43,6 +43,11 @@ export function apiUrl(action, params = {}) {
   return `${API_URL}?${qs.toString()}`;
 }
 
+/** Address of a question's figure (picture / diagram). */
+export function figureUrl(key) {
+  return key ? `${API_URL}?action=figure&k=${encodeURIComponent(key)}` : '';
+}
+
 /** Counts a visit for the developer dashboard (an anonymous random id per browser, never personal data). */
 export function trackVisit(area, path = '') {
   let vid = '';

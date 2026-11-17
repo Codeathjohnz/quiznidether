@@ -48,6 +48,11 @@ export const TEMPLATE_TEXT = `# ================================================
 #               Without it, the question uses the quiz's time per question.
 #  * Optional:  TYPE: Multiple Choice / True or False / Identification
 #               (normally detected automatically)
+#  * Optional:  FIGURE:  then an SVG drawing on the next lines,
+#               from <svg ...> to </svg>. Students see it under
+#               the question (graphs, shapes, diagrams, charts).
+#               Pictures inside a Word (.docx) file are added
+#               automatically, or add them later with Edit.
 #  * Group questions with headings like:            TEST II. TRUE OR FALSE
 #  * Instead of ANSWER lines you may put an answer key at the very end:
 #        ANSWER KEY
@@ -59,12 +64,35 @@ export const TEMPLATE_TEXT = `# ================================================
 ${TEMPLATE_EXAMPLE}
 `;
 
-export function buildPrompt({ topic, items, types, level }) {
+export const FIGURE_EXAMPLE = `5. What is the area of the rectangle shown?
+FIGURE:
+<svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg" font-family="Arial" font-size="16">
+  <rect width="320" height="200" fill="#ffffff"/>
+  <rect x="60" y="40" width="200" height="100" fill="#dbeafe" stroke="#1e3a8a" stroke-width="3"/>
+  <text x="160" y="170" text-anchor="middle" fill="#111827">8 cm</text>
+  <text x="285" y="95" text-anchor="middle" fill="#111827">4 cm</text>
+</svg>
+A. 12 square cm
+B. 24 square cm
+C. 32 square cm
+D. 64 square cm
+ANSWER: C`;
+
+const FIGURE_RULES = `
+FIGURES (pictures for the students):
+- Add a figure under questions that are better with a visual: graphs, charts, geometric shapes, number lines, diagrams, maps, circuits, tables of data, labeled parts, etc. Aim for about 1 in every 4 questions, only where it truly helps. Never put the answer itself in the figure unless the question asks the student to read it.
+- Write the figure right under the question line: a line "FIGURE:" then the drawing as SVG code from <svg ...> to </svg>.
+- SVG rules: always include viewBox and xmlns="http://www.w3.org/2000/svg"; size about 400 x 250; white background rect; dark text (#111827) at font-size 14 or more; clear thick lines; simple flat colors.
+- Use only basic shapes: rect, circle, ellipse, line, polyline, polygon, path, text, g, marker. NO <image>, NO links, NO scripts, NO foreignObject, NO outside fonts or files.
+- Every label must be readable and must not overlap other labels or lines. Make sure the drawing matches the question and the answer exactly (correct values, angles, proportions).
+- Questions that need the figure should say so, e.g. "Based on the figure, ...".`;
+
+export function buildPrompt({ topic, items, types, level, figures }) {
   const names = { mcq: 'Multiple Choice', tf: 'True or False', text: 'Identification' };
   const chosen = Object.keys(names).filter((k) => types[k]);
   const mix = chosen.length ? chosen.map((k) => names[k]).join(', ') : 'Multiple Choice';
   return `Make a quiz about "${topic || 'Introduction to Computing'}" with ${items || 30} items${level ? ` for ${level}` : ''}.
-Question types to use: ${mix}${chosen.length > 1 ? ' (group them by type)' : ''}.
+Question types to use: ${mix}${chosen.length > 1 ? ' (group them by type)' : ''}.${figures ? '\nInclude figures (SVG drawings) for the questions that need a visual — see FIGURES below.' : ''}
 
 Write it in EXACTLY this plain-text format so I can upload it to my quiz system:
 - Number the questions continuously: 1., 2., 3., ... (do NOT restart numbering for each test).
@@ -77,8 +105,8 @@ Write it in EXACTLY this plain-text format so I can upload it to my quiz system:
 - Leave a blank line between questions. No bold text, no tables, no bullet symbols, no explanations.
 - Every question must have exactly one correct answer, and every answer must be accurate.
 - Put the whole quiz inside ONE code block.
-
+${figures ? FIGURE_RULES + '\n' : ''}
 Follow this example format:
 
-${TEMPLATE_EXAMPLE}`;
+${TEMPLATE_EXAMPLE}${figures ? `\n\nExample of a question with a figure:\n\n${FIGURE_EXAMPLE}` : ''}`;
 }

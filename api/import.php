@@ -11,6 +11,8 @@
  *   ANSWER: A                            <- answer: letter, True/False (Tama/Mali), or text (alternatives with |)
  *   POINTS: 2                            <- optional, default 1
  *   TYPE: Identification                 <- optional, otherwise detected automatically
+ *   FIGURE:                              <- optional picture/diagram: an SVG drawing on the next lines
+ *   <svg viewBox="0 0 300 200"> ... </svg>  (AI tools can write these), or a picture from a Word file
  *
  *   ANSWER KEY                           <- optional: answers at the end instead of ANSWER: lines
  *   1. A
@@ -62,6 +64,17 @@ function parse_questionnaire(string $text): array
     $sectionType = null;  // default type from a "TEST II. TRUE OR FALSE" heading
     $keyMode = false;
     $ignored = 0;
+    $svg = null;          // SVG drawing being read (FIGURE: lines until </svg>)
+    $svgLine = 0;
+    $setFigure = function (?int $cur, string $fig, int $line) use (&$questions, &$warnings) {
+        if ($cur === null) return;
+        if ($questions[$cur]['figure'] !== null) {
+            $warnings[] = ['line' => $line, 'message' => 'Item ' . $questions[$cur]['num'] . ' has more than one FIGURE; only the first one is used.'];
+            return;
+        }
+        $questions[$cur]['figure'] = $fig;
+        $questions[$cur]['figure_line'] = $line;
+    };
 
     $isHeading = function (string $l): bool {
         if (preg_match('/^(part|test|section|exam|quiz)\b/i', $l) && import_type_from($l)) return true;   // "Test II - True or False"
@@ -73,6 +86,15 @@ function parse_questionnaire(string $text): array
 
     foreach ($lines as $i => $raw) {
         $n = $i + 1;
+        if ($svg !== null) {                                               // inside a FIGURE drawing
+            $svg .= "\n" . $raw;
+            if (stripos($raw, '</svg>') !== false) {
+                $setFigure($cur, $svg, $svgLine);
+                $svg = null;
+            }
+            continue;
+        }
+        if (preg_match('/^\s*```/', $raw)) continue;                        // AI code-block fences
         $l = trim(preg_replace('/[\x{00A0}\x{2007}\x{202F}\t]+/u', ' ', $raw));
         $l = preg_replace('/^[*_]{1,2}(.*?)[*_]{1,2}$/u', '$1', $l);          // strip **markdown bold**
         $l = trim(preg_replace('/^#{1,6}\s+/', '', $l, 1, $hashes));       // "## Test I" markdown headings
@@ -128,9 +150,30 @@ function parse_questionnaire(string $text): array
             $questions[] = [
                 'num' => (int)$m[1], 'line' => $n, 'text' => trim($m[2]), 'choices' => [], 'answer' => null, 'answer_line' => null,
                 'type' => null, 'section_type' => $sectionType, 'points' => 1.0, 'time' => null, 'time_line' => null,
+                'figure' => null, 'figure_line' => null,
             ];
             $cur = count($questions) - 1;
             continue;
+        }
+
+        // ----- figure: FIGURE: <svg ...> ... </svg>, or a picture from a Word file (FIGURE: @img3) -----
+        if (preg_match('/^(?:figure|fig\.?|image|picture|diagram|illustration|graph)\s*[:\-=]\s*(.*)$/i', $l, $fm)
+            || preg_match('/^(<svg\b.*)$/i', $l, $fm)) {
+            $rest = trim($fm[1]);
+            if ($rest === '' || stripos($rest, '<svg') === 0 || stripos($rest, '<?xml') === 0 || preg_match('/^@img\d+$/i', $rest)) {
+                if ($cur === null) {
+                    $warnings[] = ['line' => $n, 'message' => 'A FIGURE before the first question was ignored (put it under its question).'];
+                }
+                if ($rest !== '' && $rest[0] === '@') {
+                    $setFigure($cur, strtolower($rest), $n);
+                } elseif ($rest !== '' && stripos($rest, '</svg>') !== false) {
+                    $setFigure($cur, $rest, $n);
+                } else {
+                    $svg = $rest;
+                    $svgLine = $n;
+                }
+                continue;
+            }
         }
 
         if ($cur === null) {
@@ -179,7 +222,8 @@ function parse_questionnaire(string $text): array
         $item = ['num' => $q['num'], 'line' => $q['line'], 'type' => $type, 'question' => trim($q['text']), 'points' => $q['points'],
                  'choices' => [], 'tf_answer' => null, 'accepted' => [],
                  'time_seconds' => $q['time'] ? $q['time'][0] : null, 'time_unit' => $q['time'] ? $q['time'][1] : null,
-                 'time_label' => $q['time'] ? fmt_timer($q['time'][0]) : null];
+                 'time_label' => $q['time'] ? fmt_timer($q['time'][0]) : null,
+                 'figure_src' => $q['figure'], 'figure_line' => $q['figure_line']];
         if ($item['points'] <= 0 || $item['points'] > 1000) { $err('POINTS must be greater than 0.'); continue; }
         if ($q['time'] === false) { $err('TIME must look like "30 sec", "1 min" or "1:30".'); continue; }
         if ($q['time'] && ($q['time'][0] < 5 || $q['time'][0] > 86400)) { $err('TIME must be between 5 seconds and 24 hours.'); continue; }
@@ -219,6 +263,9 @@ function parse_questionnaire(string $text): array
         }
         $out[] = $item;
     }
+    if ($svg !== null) {
+        $errors[] = ['line' => $svgLine, 'message' => "FIGURE on line $svgLine has no closing </svg>, so the drawing was not read."];
+    }
     if ($ignored && $questions) {
         $warnings[] = ['line' => 0, 'message' => "$ignored line(s) before the first question were ignored (titles, instructions, notes)."];
     }
@@ -234,11 +281,19 @@ function h_questions_import(PDO $db): void
     if (trim($text) === '') fail('Paste your questionnaire or choose a file first.');
     if (strlen($text) > IMPORT_MAX_CHARS) fail('The file is too big (maximum about 400 KB of text).');
 
+    $images = input()['images'] ?? [];
+    if (!is_array($images)) $images = [];
+    if (count($images) > IMPORT_MAX_QUESTIONS) fail('Too many pictures in the file.');
+
     $parsed = parse_questionnaire($text);
     if (!$parsed['found']) {
         fail('No questions found. Each question must start with a number, like "1. What is a computer?". Download the template to see the format.');
     }
-    if (!bool_in('commit')) out($parsed + ['imported' => 0]);   // preview only
+    import_figures($parsed, $images);
+    $public = $parsed;
+    foreach ($public['questions'] as &$pq) unset($pq['figure_data'], $pq['figure_src']);
+    unset($pq);
+    if (!bool_in('commit')) out($public + ['imported' => 0]);   // preview only
 
     if (!$parsed['questions']) fail('Nothing to import — fix the errors first.');
     $replace = str_in('mode') === 'replace';
@@ -246,16 +301,55 @@ function h_questions_import(PDO $db): void
     $db->beginTransaction();
     if ($replace) $db->prepare('DELETE FROM questions WHERE quiz_id = ?')->execute([$quizId]);
     $order = scalar($db, 'SELECT COALESCE(MAX(sort_order), 0) FROM questions WHERE quiz_id = ?', [$quizId]);
-    $insQ = $db->prepare('INSERT INTO questions (quiz_id, type, question, answer_text, points, time_seconds, time_unit, sort_order)
-                          VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    $insQ = $db->prepare('INSERT INTO questions (quiz_id, type, question, answer_text, figure_id, points, time_seconds, time_unit, sort_order)
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $insC = $db->prepare('INSERT INTO choices (question_id, choice_text, is_correct, sort_order) VALUES (?, ?, ?, ?)');
     foreach ($parsed['questions'] as $q) {
         $answerText = $q['type'] === 'tf' ? $q['tf_answer'] : ($q['type'] === 'text' ? implode("\n", $q['accepted']) : null);
-        $insQ->execute([$quizId, $q['type'], $q['question'], $answerText, $q['points'], $q['time_seconds'], $q['time_unit'], ++$order]);
+        $figureId = $q['figure_data'] ? figure_store($db, $q['figure_data'])['id'] : null;
+        $insQ->execute([$quizId, $q['type'], $q['question'], $answerText, $figureId, $q['points'], $q['time_seconds'], $q['time_unit'], ++$order]);
         $qid = (int)$db->lastInsertId();
         foreach ($q['choices'] as $ci => $c) $insC->execute([$qid, $c['text'], $c['correct'] ? 1 : 0, $ci]);
     }
     $db->commit();
     regrade_quiz($db, $quizId);
-    out($parsed + ['imported' => count($parsed['questions']), 'replaced' => $replace]);
+    out($public + ['imported' => count($parsed['questions']), 'replaced' => $replace]);
+}
+
+/**
+ * Reads the FIGURE of every question: an SVG drawing written in the text, or a picture sent along with a
+ * Word file ("@img3" -> $images['img3'] as a data URL). A figure that cannot be read makes that item an error.
+ * Adds 'figure_data' (for saving) and 'figure' (a small preview: data URL of an SVG, or "@img3").
+ */
+function import_figures(array &$parsed, array $images): void
+{
+    $keep = [];
+    foreach ($parsed['questions'] as $q) {
+        $q['figure_data'] = null;
+        $q['figure'] = null;
+        $src = $q['figure_src'];
+        if ($src !== null) {
+            $label = 'Item ' . $q['num'] . ' (line ' . $q['figure_line'] . ')';
+            if ($src[0] === '@') {
+                $img = $images[substr($src, 1)] ?? null;
+                if (is_string($img) && str_starts_with($img, 'unsupported:')) {
+                    $fig = ['error' => 'this picture is a ' . strtoupper(substr($img, 12, 8)) . ' file, which browsers cannot show. '
+                        . 'In Word, replace it with a PNG or JPG picture (or right-click > Save as Picture > PNG, then insert that).'];
+                } else {
+                    $fig = is_string($img) ? figure_decode($img) : ['error' => 'the picture ' . $src . ' is missing. Upload the Word file again.'];
+                }
+            } else {
+                $fig = figure_decode($src);
+            }
+            if (isset($fig['error'])) {
+                $parsed['errors'][] = ['line' => $q['figure_line'], 'message' => "$label: FIGURE - " . $fig['error']];
+                continue;
+            }
+            $q['figure_data'] = $fig;
+            $q['figure'] = $src[0] === '@' ? $src : 'data:image/svg+xml;base64,' . base64_encode($fig['bytes']);
+        }
+        $keep[] = $q;
+    }
+    $parsed['questions'] = $keep;
+    usort($parsed['errors'], fn($a, $b) => $a['line'] <=> $b['line']);
 }

@@ -3,6 +3,7 @@ import { api } from '../api';
 import { TYPE_NAMES, plural } from '../utils';
 import { Alert, useToast } from './ui';
 import Mascot from './Mascot';
+import Figure from './Figure';
 
 function answerOf(q) {
   if (q.type === 'mcq') {
@@ -12,8 +13,14 @@ function answerOf(q) {
   return q.accepted.join(' | ');
 }
 
+/** A Word picture is a data URL; an SVG drawing is text. */
+function figureSrc(img) {
+  if (!img || img.startsWith('unsupported:')) return '';
+  return img.startsWith('data:') ? img : `data:image/svg+xml;charset=utf-8,${encodeURIComponent(img)}`;
+}
+
 /** Shows parsed questions (from an upload or the AI) and imports them into the quiz. */
-export default function QuestionPreview({ preview, text, quiz, existingCount, attemptCount, onImported, onClose, title, note }) {
+export default function QuestionPreview({ preview, text, images = {}, quiz, existingCount, attemptCount, onImported, onClose, title, note }) {
   const toast = useToast();
   const [mode, setMode] = useState('append');
   const [busy, setBusy] = useState(false);
@@ -28,7 +35,7 @@ export default function QuestionPreview({ preview, text, quiz, existingCount, at
     setBusy(true);
     setError('');
     try {
-      const r = await api('questions.import', { quiz_id: quiz.id, text, commit: true, mode });
+      const r = await api('questions.import', { quiz_id: quiz.id, text, images, commit: true, mode });
       toast(`🎉 Added ${plural(r.imported, 'question')} to the quiz!`);
       onImported();
       onClose();
@@ -76,6 +83,7 @@ export default function QuestionPreview({ preview, text, quiz, existingCount, at
               <span className="chip">{q.points} pt{Number(q.points) === 1 ? '' : 's'}</span>
             </div>
             <div className="pv-q">{q.question}</div>
+            {q.figure && <Figure small src={q.figure.startsWith('@') ? figureSrc(images[q.figure.slice(1)]) : q.figure} />}
             {q.type === 'mcq' && (
               <div className="pv-choices">
                 {q.choices.map((c, j) => (

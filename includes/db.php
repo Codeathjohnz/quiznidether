@@ -49,9 +49,16 @@ function migrate_schema(PDO $pdo): void
 {
     $hasCol = fn(string $table, string $col) => (bool)$pdo->query("SHOW COLUMNS FROM `$table` LIKE '$col'")->fetch();
     $hasTable = fn(string $table) => (bool)$pdo->query("SHOW TABLES LIKE '$table'")->fetch();
-    if ($hasCol('admins', 'email') && $hasCol('quizzes', 'time_unit') && $hasCol('quizzes', 'timer_mode') && $hasTable('reviews') && $hasCol('admins', 'tour_done')) return;
+    if ($hasCol('admins', 'email') && $hasCol('quizzes', 'time_unit') && $hasCol('quizzes', 'timer_mode') && $hasTable('reviews') && $hasCol('admins', 'tour_done')
+        && $hasCol('questions', 'figure_id')) return;
     $pdo->query("SELECT GET_LOCK('qnd_migrate', 30)");
     try {
+        // v7: figures (pictures / diagrams) shown with a question.
+        if (!$hasCol('questions', 'figure_id') && $hasCol('questions', 'time_seconds')) {
+            $pdo->exec(figures_table());
+            $pdo->exec('ALTER TABLE questions ADD figure_id INT NULL AFTER answer_text,
+                        ADD CONSTRAINT fk_question_figure FOREIGN KEY (figure_id) REFERENCES figures(id) ON DELETE SET NULL');
+        }
         // v5: visit tracking + reviews/suggestions for the developer dashboard.
         if (!$hasTable('reviews')) foreach (feedback_tables() as $s) $pdo->exec($s);
         // v6: first-time guide (tour) shown once per teacher.
@@ -144,17 +151,21 @@ function install_schema(PDO $pdo): void
             CONSTRAINT fk_quiz_class FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
         ) ENGINE=InnoDB",
 
+        figures_table(),
+
         "CREATE TABLE IF NOT EXISTS questions (
             id INT AUTO_INCREMENT PRIMARY KEY,
             quiz_id INT NOT NULL,
             type ENUM('mcq','tf','text') NOT NULL DEFAULT 'mcq',
             question TEXT NOT NULL,
             answer_text TEXT NULL,
+            figure_id INT NULL,
             points DECIMAL(6,2) NOT NULL DEFAULT 1,
             time_seconds INT NULL,
             time_unit ENUM('seconds','minutes','hours') NULL,
             sort_order INT NOT NULL DEFAULT 0,
-            CONSTRAINT fk_question_quiz FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE
+            CONSTRAINT fk_question_quiz FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE,
+            CONSTRAINT fk_question_figure FOREIGN KEY (figure_id) REFERENCES figures(id) ON DELETE SET NULL
         ) ENGINE=InnoDB",
 
         "CREATE TABLE IF NOT EXISTS choices (
@@ -208,6 +219,21 @@ function install_schema(PDO $pdo): void
         ) ENGINE=InnoDB",
     ];
     foreach (array_merge($sql, feedback_tables()) as $s) $pdo->exec($s);
+}
+
+/** Pictures and diagrams attached to questions (kept in the database so they survive redeploys). */
+function figures_table(): string
+{
+    return "CREATE TABLE IF NOT EXISTS figures (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        fkey CHAR(24) NOT NULL UNIQUE,
+        owner_id INT NULL,
+        mime VARCHAR(40) NOT NULL,
+        bytes INT NOT NULL,
+        data MEDIUMBLOB NOT NULL,
+        created_at DATETIME NOT NULL,
+        INDEX idx_figure_owner (owner_id, created_at)
+    ) ENGINE=InnoDB";
 }
 
 /** Visits (who opened the site) and reviews (rating + comment + suggestion from teachers and students). */

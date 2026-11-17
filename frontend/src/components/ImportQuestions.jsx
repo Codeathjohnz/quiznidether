@@ -5,6 +5,7 @@ import { TEMPLATE_TEXT, buildPrompt } from '../importTemplate';
 import { TYPE_NAMES } from '../utils';
 import { Alert, useToast } from './ui';
 import QuestionPreview from './QuestionPreview';
+import { prepareImage } from '../images';
 
 function download(name, text) {
   const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
@@ -30,8 +31,9 @@ async function copyText(text) {
 export default function ImportQuestions({ quiz, existingCount, attemptCount, onClose, onImported }) {
   const toast = useToast();
   const fileRef = useRef(null);
-  const [prompt, setPrompt] = useState({ topic: quiz.class_name || quiz.title, items: 30, level: '', types: { mcq: true, tf: true, text: true } });
+  const [prompt, setPrompt] = useState({ topic: quiz.class_name || quiz.title, items: 30, level: '', types: { mcq: true, tf: true, text: true }, figures: false });
   const [text, setText] = useState('');
+  const [images, setImages] = useState({}); // pictures from a Word file: { img1: dataURL }
   const [fileName, setFileName] = useState('');
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState('');
@@ -40,13 +42,13 @@ export default function ImportQuestions({ quiz, existingCount, attemptCount, onC
 
   const promptText = useMemo(() => buildPrompt(prompt), [prompt]);
 
-  const check = async (value = text) => {
+  const check = async (value = text, imgs = images) => {
     setError('');
     setPreview(null);
     if (!value.trim()) return setError('Paste your questionnaire or choose a file first.');
     setBusy(true);
     try {
-      setPreview(await api('questions.import', { quiz_id: quiz.id, text: value }));
+      setPreview(await api('questions.import', { quiz_id: quiz.id, text: value, images: imgs }));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -60,12 +62,14 @@ export default function ImportQuestions({ quiz, existingCount, attemptCount, onC
     setPreview(null);
     try {
       let content;
-      if (/\.docx$/i.test(file.name)) content = await docxToText(file);
+      let imgs = {};
+      if (/\.docx$/i.test(file.name)) ({ text: content, images: imgs } = await docxToText(file, prepareImage));
       else if (/\.(txt|md|text)$/i.test(file.name) || file.type.startsWith('text/')) content = await file.text();
       else throw new Error('Please upload a .txt or .docx file (or paste the text).');
       setFileName(file.name);
       setText(content);
-      check(content);
+      setImages(imgs);
+      check(content, imgs);
     } catch (e) {
       setError(e.message);
     }
@@ -108,6 +112,10 @@ export default function ImportQuestions({ quiz, existingCount, attemptCount, onC
                   </label>
                 ))}
               </div>
+              <label className="check figure-check">
+                <input type="checkbox" checked={prompt.figures} onChange={(e) => setPrompt({ ...prompt, figures: e.target.checked })} />
+                <span>🖼 Include figures <small className="muted">— Claude draws graphs, shapes, diagrams and charts for the questions that need them</small></span>
+              </label>
               <textarea className="prompt-preview" readOnly rows={6} value={promptText} onFocus={(e) => e.target.select()} />
               <div className="row-actions">
                 <button type="button" className="btn btn-sm btn-primary" onClick={() => copyText(promptText).then(() => toast('Prompt copied! Paste it into Claude. 🤖'))}>
@@ -136,7 +144,7 @@ export default function ImportQuestions({ quiz, existingCount, attemptCount, onC
             >
               <span className="dz-icon">📄</span>
               <b>{fileName || 'Drop your file here or click to choose'}</b>
-              <small className="muted">.txt or .docx (Word)</small>
+              <small className="muted">.txt or .docx (Word) · pictures in a Word file become figures</small>
               <input ref={fileRef} type="file" accept=".txt,.md,.docx,text/plain" hidden
                 onChange={(e) => { loadFile(e.target.files[0]); e.target.value = ''; }} />
             </div>
@@ -154,7 +162,7 @@ export default function ImportQuestions({ quiz, existingCount, attemptCount, onC
       <Alert>{error}</Alert>
 
       {preview && (
-        <QuestionPreview preview={preview} text={text} quiz={quiz} existingCount={existingCount} attemptCount={attemptCount}
+        <QuestionPreview preview={preview} text={text} images={images} quiz={quiz} existingCount={existingCount} attemptCount={attemptCount}
           onImported={onImported} onClose={onClose} title="3 · Review before importing" />
       )}
     </section>

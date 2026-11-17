@@ -129,9 +129,10 @@ function pq_current(PDO $db, array $a): array
     $idx = (int)$a['current_index'];
     $times = pq_times($db, $a);
     $qid = $order[$idx];
-    $st = $db->prepare('SELECT id, type, question, points FROM questions WHERE id = ?');
+    $st = $db->prepare('SELECT q.id, q.type, q.question, q.points, f.fkey AS figure FROM questions q
+                        LEFT JOIN figures f ON f.id = q.figure_id WHERE q.id = ?');
     $st->execute([$qid]);
-    $q = $st->fetch() ?: ['id' => $qid, 'type' => 'text', 'question' => '(This question was removed by the teacher.)', 'points' => 0];
+    $q = $st->fetch() ?: ['id' => $qid, 'type' => 'text', 'question' => '(This question was removed by the teacher.)', 'points' => 0, 'figure' => null];
     $choices = [];
     if ($q['type'] === 'mcq') {
         $st = $db->prepare('SELECT id, choice_text FROM choices WHERE question_id = ? ORDER BY sort_order, id');
@@ -152,8 +153,8 @@ function pq_current(PDO $db, array $a): array
         'index' => $idx,
         'count' => count($order),
         'question' => [
-            'id' => (int)$q['id'], 'type' => $q['type'], 'question' => $q['question'], 'points' => fmt_num($q['points']),
-            'choices' => $choices, 'seconds' => $limit,
+            'id' => (int)$q['id'], 'type' => $q['type'], 'question' => $q['question'], 'figure' => $q['figure'],
+            'points' => fmt_num($q['points']), 'choices' => $choices, 'seconds' => $limit,
         ],
         'question_seconds_left' => $left,
         'total_seconds_left' => $left + $later,
@@ -205,7 +206,8 @@ function h_take_start(PDO $db): void
     if (!$quiz) fail('This quiz link is invalid.');
     if (!$quiz['is_open']) fail('This quiz is closed and no longer accepting answers.');
 
-    $st = $db->prepare('SELECT * FROM questions WHERE quiz_id = ? ORDER BY sort_order, id');
+    $st = $db->prepare('SELECT q.*, f.fkey AS figure FROM questions q LEFT JOIN figures f ON f.id = q.figure_id
+                        WHERE q.quiz_id = ? ORDER BY q.sort_order, q.id');
     $st->execute([$quiz['id']]);
     $questions = $st->fetchAll();
     if (!$questions) fail('This quiz has no questions yet.');
@@ -247,7 +249,7 @@ function h_take_start(PDO $db): void
     foreach ($questions as $q) {
         $ch = $choices[(int)$q['id']] ?? [];
         if ($quiz['shuffle_questions']) shuffle($ch);
-        $list[] = ['id' => (int)$q['id'], 'type' => $q['type'], 'question' => $q['question'], 'points' => fmt_num($q['points']),
+        $list[] = ['id' => (int)$q['id'], 'type' => $q['type'], 'question' => $q['question'], 'figure' => $q['figure'], 'points' => fmt_num($q['points']),
                    'choices' => $q['type'] === 'mcq' ? $ch : []];
     }
     out($base + ['mode' => 'whole', 'seconds_left' => (int)$quiz['time_seconds'], 'questions' => $list]);

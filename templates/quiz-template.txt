@@ -18,6 +18,11 @@
 #               Without it, the question uses the quiz's time per question.
 #  * Optional:  TYPE: Multiple Choice / True or False / Identification
 #               (normally detected automatically)
+#  * Optional:  FIGURE:  then an SVG drawing on the next lines,
+#               from <svg ...> to </svg>. Students see it under
+#               the question (graphs, shapes, diagrams, charts).
+#               Pictures inside a Word (.docx) file are added
+#               automatically, or add them later with Edit.
 #  * Group questions with headings like:            TEST II. TRUE OR FALSE
 #  * Instead of ANSWER lines you may put an answer key at the very end:
 #        ANSWER KEY

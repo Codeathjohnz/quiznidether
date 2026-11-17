@@ -10,6 +10,17 @@ require __DIR__ . '/admin.php';
 require __DIR__ . '/import.php';
 require __DIR__ . '/student.php';
 require __DIR__ . '/dev.php';
+require __DIR__ . '/figures.php';
+
+// Pictures of questions are served as images, not JSON.
+if (($_GET['action'] ?? '') === 'figure') {
+    try {
+        h_figure_get(db());
+    } catch (Throwable $e) {
+        http_response_code(500);
+        exit;
+    }
+}
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -50,6 +61,7 @@ $routes = [
     'questions.delete' => 'h_questions_delete',
     'questions.move'   => 'h_questions_move',
     'questions.import' => 'h_questions_import',
+    'figures.upload'   => 'h_figures_upload',
     'results.list'     => 'h_results_list',
     'results.export'   => 'h_results_export',
     'results.regrade'  => 'h_results_regrade',
