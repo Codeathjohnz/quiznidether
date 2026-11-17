@@ -18,13 +18,15 @@ export async function api(action, data = {}) {
       credentials: 'same-origin',
     });
   } catch {
-    throw new ApiError('Cannot reach the server. Check that XAMPP Apache is running and your connection is OK.', 0);
+    throw new ApiError(import.meta.env.DEV || /^(localhost|127\.|192\.168\.|10\.)/.test(location.hostname)
+      ? 'Cannot reach the server. Check that XAMPP Apache is running and your connection is OK.'
+      : 'Cannot reach the server. Check your internet connection and try again.', 0);
   }
   let json;
   try {
     json = await res.json();
   } catch {
-    throw new ApiError(`Server error (${res.status}). Is MySQL running in XAMPP?`, res.status);
+    throw new ApiError(`Server error (${res.status}). Please try again in a moment.`, res.status);
   }
   if (!json.ok) {
     if (res.status === 401 && !action.startsWith('auth.') && !action.startsWith('take.')) {
