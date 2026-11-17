@@ -71,4 +71,7 @@ After changing anything in `frontend/src`, run `npm run build` so the XAMPP vers
 - `ALLOW_SIGNUP` — set to `false` to stop new teachers from signing up
 - `ALLOWED_EMAIL_DOMAINS` — e.g. `'gmail.com,myschool.edu.ph'` to limit who can sign up
 - `AUTO_PASSING_PERCENT` — passing % used by "Automatic" mode (default 75)
-- `HEARTBEAT_TIMEOUT` — seconds without a signal before a quiz is terminated as force-closed (default 45)
+- `HEARTBEAT_TIMEOUT` — seconds without a signal before a student shows as "📴 No signal" in Results (default 45)
+- `OFFLINE_GRACE_SECONDS` — lost internet: the quiz keeps running on the student's device and answers are sent
+  when it reconnects. After the time ends the server waits this long for that device before closing the attempt
+  as "device stopped responding" (default 900 = 15 min). In per-question mode the next question waits for the device.

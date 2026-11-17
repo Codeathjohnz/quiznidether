@@ -50,9 +50,14 @@ function migrate_schema(PDO $pdo): void
     $hasCol = fn(string $table, string $col) => (bool)$pdo->query("SHOW COLUMNS FROM `$table` LIKE '$col'")->fetch();
     $hasTable = fn(string $table) => (bool)$pdo->query("SHOW TABLES LIKE '$table'")->fetch();
     if ($hasCol('admins', 'email') && $hasCol('quizzes', 'time_unit') && $hasCol('quizzes', 'timer_mode') && $hasTable('reviews') && $hasCol('admins', 'tour_done')
-        && $hasCol('questions', 'figure_id')) return;
+        && $hasCol('questions', 'figure_id') && $hasCol('attempts', 'offline_seconds')) return;
     $pdo->query("SELECT GET_LOCK('qnd_migrate', 30)");
     try {
+        // v8: how long a student's device was offline during the quiz.
+        if (!$hasCol('attempts', 'offline_seconds') && $hasTable('attempts')) {
+            $pdo->exec('ALTER TABLE attempts ADD offline_count INT NOT NULL DEFAULT 0 AFTER last_seen,
+                        ADD offline_seconds INT NOT NULL DEFAULT 0 AFTER offline_count');
+        }
         // v7: figures (pictures / diagrams) shown with a question.
         if (!$hasCol('questions', 'figure_id') && $hasCol('questions', 'time_seconds')) {
             $pdo->exec(figures_table());
@@ -194,6 +199,8 @@ function install_schema(PDO $pdo): void
             started_at DATETIME NOT NULL,
             deadline DATETIME NOT NULL,
             last_seen DATETIME NOT NULL,
+            offline_count INT NOT NULL DEFAULT 0,
+            offline_seconds INT NOT NULL DEFAULT 0,
             finished_at DATETIME NULL,
             score DECIMAL(8,2) NOT NULL DEFAULT 0,
             total_points DECIMAL(8,2) NOT NULL DEFAULT 0,

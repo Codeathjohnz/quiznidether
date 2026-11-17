@@ -51,6 +51,12 @@ export default function AttemptDetail() {
           <div><dt>Started</dt><dd>{fmtDt(a.started_at)}</dd></div>
           <div><dt>Finished</dt><dd>{fmtDt(a.finished_at)} <span className="muted">({fmtDuration(a.duration)})</span></dd></div>
           <div><dt>Answered</dt><dd>{a.answered} of {answers.length}</dd></div>
+          <div><dt>Internet</dt><dd>
+            {a.offline_count > 0
+              ? <>📴 Lost connection {a.offline_count} time{a.offline_count === 1 ? '' : 's'}, about {fmtDuration(a.offline_seconds)} offline in total. <span className="muted small">Answers made while offline were sent when it came back.</span></>
+              : <span className="muted">No connection problems reported</span>}
+            {a.no_signal && <> · <span className="badge badge-warn">No signal since {fmtDt(a.last_seen)}</span></>}
+          </dd></div>
           <div><dt>Device</dt><dd className="small muted">{a.ip} · {a.user_agent}{a.client_note && <><br />{a.client_note}</>}</dd></div>
         </dl>
       </section>

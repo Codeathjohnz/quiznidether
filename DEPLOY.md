@@ -135,4 +135,5 @@ the `quiz-db` **Terminal** / server SSH and import it with
 | `DEVELOPER_EMAILS` | empty (= first account) | Who can open the Developer dashboard, e.g. `me@gmail.com` |
 | `ALLOWED_EMAIL_DOMAINS` | empty | e.g. `gmail.com,myschool.edu.ph` |
 | `AUTO_PASSING_PERCENT` | `75` | Passing % for "Automatic" mode |
-| `HEARTBEAT_TIMEOUT` | `45` | Seconds before a silent (force-closed) quiz is terminated |
+| `HEARTBEAT_TIMEOUT` | `45` | Seconds of silence before a student shows as "📴 No signal" in Results |
+| `OFFLINE_GRACE_SECONDS` | `900` | After the time ends, how long to wait for an offline device to send its answers before closing the attempt as "no heartbeat" |

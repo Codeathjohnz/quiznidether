@@ -114,6 +114,10 @@ function attempt_row(array $a): array
         'duration' => max(0, $end - strtotime($a['started_at'])),
         'seconds_left' => max(0, strtotime($a['deadline']) - time()),
         'is_new' => $a['status'] === 'terminated' && !$a['admin_seen'],
+        'no_signal' => $a['status'] === 'in_progress' && strtotime($a['last_seen']) < time() - HEARTBEAT_TIMEOUT,
+        'last_seen' => $a['last_seen'],
+        'offline_count' => (int)($a['offline_count'] ?? 0),
+        'offline_seconds' => (int)($a['offline_seconds'] ?? 0),
         'ip' => $a['ip'],
         'user_agent' => $a['user_agent'],
     ];

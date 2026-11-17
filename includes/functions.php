@@ -5,7 +5,7 @@ const TERMINATION_REASONS = [
     'window_blur'     => 'Switched to another window or application (e.g. Alt+Tab, clicked outside the browser)',
     'page_unload'     => 'Closed the quiz tab/window (clicked X) or reloaded the page',
     'reopened'        => 'Left the quiz and opened the quiz link again while the attempt was still running',
-    'no_heartbeat'    => 'Connection lost or browser was force-closed (device stopped responding)',
+    'no_heartbeat'    => 'Device stopped responding and never came back (browser force-closed, or no internet until long after the time ended)',
     'second_screen'   => 'Connected a second monitor / extended display during the quiz',
     'window_resized'  => 'Made the quiz window smaller than the screen (split screen / snapped window)',
 ];
@@ -210,23 +210,27 @@ function finish_attempt(PDO $db, int $id, string $status, ?string $reason = null
     return false;
 }
 
-/** Finalizes attempts whose device stopped responding or whose time ran out long ago. */
+/**
+ * Finalizes attempts whose time ran out. A device that goes silent is NOT terminated right away:
+ * it may only have lost its internet (the quiz keeps running on it and sends the answers later).
+ *  - device was still in contact when the time ended -> submitted
+ *  - device silent since before the end -> wait OFFLINE_GRACE_SECONDS for it, then terminated (no_heartbeat)
+ */
 function sweep_stale_attempts(PDO $db): void
 {
-    $cut = date('Y-m-d H:i:s', time() - HEARTBEAT_TIMEOUT);
     $late = date('Y-m-d H:i:s', time() - SUBMIT_GRACE_SECONDS);
-    $st = $db->prepare("SELECT id, deadline, last_seen FROM attempts
-                        WHERE status = 'in_progress' AND (last_seen < ? OR deadline < ?)");
-    $st->execute([$cut, $late]);
+    $st = $db->prepare("SELECT id, deadline, last_seen FROM attempts WHERE status = 'in_progress' AND deadline < ?");
+    $st->execute([$late]);
     foreach ($st->fetchAll() as $a) {
         $lastSeen = strtotime($a['last_seen']);
         $deadline = strtotime($a['deadline']);
         if ($lastSeen >= $deadline - 15) {
             finish_attempt($db, (int)$a['id'], 'submitted', null, null, 'Time expired — auto-submitted by the system');
-        } else {
+        } elseif (time() > $deadline + OFFLINE_GRACE_SECONDS) {
             finish_attempt($db, (int)$a['id'], 'terminated', 'no_heartbeat',
                 'Last signal from the student\'s device: ' . date('M j, Y g:i:s A', $lastSeen)
-                . ' (' . fmt_duration($deadline - $lastSeen) . ' was still left on the timer).');
+                . ' (' . fmt_duration($deadline - $lastSeen) . ' was still left on the timer). It did not come back within '
+                . fmt_timer(OFFLINE_GRACE_SECONDS) . ' after the time ended. Answers saved before that are kept.');
         }
     }
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { api, beacon, trackVisit } from '../api';
+import { api, beacon, figureUrl, trackVisit } from '../api';
 import ReviewForm from '../components/ReviewForm';
 import Figure from '../components/Figure';
 import { Alert, BouncyLoader, Modal, useToast } from '../components/ui';
@@ -79,6 +79,33 @@ function StudentReview({ token }) {
   );
 }
 
+/** Shown while the device has no internet: the quiz goes on, answers are sent later. */
+function NetBanner({ net, pending, waiting }) {
+  if (net !== 'offline' && !waiting) return null;
+  return (
+    <div className="net-banner" role="status">
+      <b>📴 No internet connection</b>
+      <span>
+        {waiting
+          ? 'Your answer is locked in and safe. It will be sent automatically, then the next question appears.'
+          : 'Keep answering! Your answers stay on this page and are sent automatically when the connection is back.'}
+        {pending > 0 && ` (${pending} waiting to send)`} <b>Do not close or reload this page.</b>
+      </span>
+    </div>
+  );
+}
+
+/** After the quiz: internet problems are no longer an excuse. */
+function OfflineReminder() {
+  return (
+    <div className="offline-reminder">
+      📶 <b>Reminder:</b> this quiz system keeps working even when the internet drops — your answers are kept on your
+      device and sent once you are back online. <b>Losing your internet connection is no longer a valid excuse</b> for
+      missing or incomplete answers. Just keep the quiz page open until it says your answers were sent.
+    </div>
+  );
+}
+
 function starsFor(r) {
   const pct = Number(r.percentage);
   if (pct >= 90) return 3;
@@ -112,12 +139,19 @@ export default function TakeQuiz() {
   // Per-question mode: the one question on screen.
   const [pq, setPq] = useState(null); // { index, count, question, later, answer }
   const [pqSending, setPqSending] = useState(false);
+  // Internet: 'online' | 'offline'. While offline the quiz goes on; answers wait on this page and are sent later.
+  const [net, setNet] = useState('online');
+  const [pending, setPending] = useState(0);
+  const [pqWait, setPqWait] = useState(false);
 
   // Mutable proctoring state (read by browser event listeners, so kept outside React state).
   const st = useRef({
     token: null, monitoring: false, ended: false, deadline: 0, fsRequired: true, warned: false, lastTick: null,
-    events: [], vTimer: null, saveTimers: {}, answers: {}, total: 0, timerId: null, hbId: null,
+    events: [], vTimer: null, answers: {}, total: 0, timerId: null, hbId: null,
     mode: 'whole', pqIndex: 0, pqQid: null, pqAnswer: '', pqSending: false,
+    // offline handling
+    dirty: {}, flushTimer: null, flushing: false, lastFlush: 0, lastProbe: 0,
+    offSince: null, offN: 0, offS: 0, waiting: false, wake: null,
   });
   const reasons = useRef({});
   const fn = useRef({});
@@ -133,8 +167,72 @@ export default function TakeQuiz() {
     clearInterval(s.timerId);
     clearInterval(s.hbId);
     clearTimeout(s.vTimer);
-    Object.values(s.saveTimers).forEach(clearTimeout);
+    clearTimeout(s.flushTimer);
     setSubmitOpen(false);
+  }
+
+  /* ---------- internet loss: keep going, send later ---------- */
+  /** How often / how long this device was offline (sent with every request, shown to the teacher). */
+  function offStats() {
+    const s = st.current;
+    const now = s.offSince ? (Date.now() - s.offSince) / 1000 : 0;
+    return { off_n: s.offN, off_s: Math.round(s.offS + now) };
+  }
+  function markOffline() {
+    const s = st.current;
+    if (s.offSince) return;
+    s.offSince = Date.now();
+    s.offN += 1;
+    setNet('offline');
+  }
+  function markOnline() {
+    const s = st.current;
+    if (!s.offSince) return;
+    s.offS += (Date.now() - s.offSince) / 1000;
+    s.offSince = null;
+    setNet('online');
+    if (!s.ended) toast('✅ Back online! Your answers are being sent.');
+  }
+  /** API call that notices a lost connection (no status = the request never reached the server). */
+  async function call(action, data) {
+    try {
+      const r = await api(action, { ...data, ...offStats() });
+      markOnline();
+      return r;
+    } catch (e) {
+      if (!e.status) markOffline();
+      throw e;
+    }
+  }
+  /** Waits a few seconds, or less if the browser says the internet is back. */
+  function waitForNet(ms = 4000) {
+    return new Promise((resolve) => {
+      const s = st.current;
+      const done = () => { clearTimeout(t); s.wake = null; resolve(); };
+      const t = setTimeout(done, ms);
+      s.wake = done;
+    });
+  }
+  /** Sends every answer that the server does not have yet, all in one request. */
+  async function flush() {
+    const s = st.current;
+    if (s.ended || s.flushing || s.mode !== 'whole') return;
+    const qids = Object.keys(s.dirty);
+    if (!qids.length) return;
+    s.flushing = true;
+    s.lastFlush = Date.now();
+    const batch = {};
+    qids.forEach((q) => { batch[q] = s.answers[q] ?? ''; });
+    try {
+      const r = await call('take.save', { token: s.token, answers: batch });
+      qids.forEach((q) => { if (s.answers[q] === batch[q]) delete s.dirty[q]; });
+      handleServerState(r);
+    } catch (e) {
+      if (e.status && e.status < 500) qids.forEach((q) => delete s.dirty[q]); // refused (e.g. time up): the final submit sends them
+    } finally {
+      s.flushing = false;
+      setPending(Object.keys(s.dirty).length);
+    }
   }
 
   function showTerminated(reasonCode, text) {
@@ -199,20 +297,27 @@ export default function TakeQuiz() {
     const qid = s.pqQid;
     const answer = s.pqAnswer;
     if (String(answer).trim() !== '') s.answers = { ...s.answers, [qid]: answer };
-    if (timedOut) toast(String(answer).trim() ? "⏰ Time's up! Your answer was saved." : "⏰ Time's up! Moving to the next question.");
+    if (timedOut) toast(String(answer).trim() ? "⏰ Time's up! Your answer is locked in." : "⏰ Time's up! Moving to the next question.");
     let res = null;
-    for (let i = 0; i < 4 && !res; i++) {
+    let fails = 0;
+    // No internet: the answer stays locked in on this page and is sent as soon as the connection is back.
+    // The next question waits on the server, so its time does not run while offline.
+    while (!res && !s.ended) {
       try {
-        res = await api('take.next', { token: s.token, question_id: qid, answer });
+        res = await call('take.next', { token: s.token, question_id: qid, answer });
       } catch (e) {
-        if (e.status && e.status < 500) break;
-        await sleep(1200);
+        if (e.status && e.status < 500 && ++fails >= 3) break;
+        if (!e.status) { s.waiting = true; setPqWait(true); }
+        await waitForNet(e.status ? 1500 : 4000);
       }
     }
+    s.waiting = false;
+    setPqWait(false);
     s.pqSending = false;
     setPqSending(false);
     if (!res) {
-      toast('Connection problem… retrying.');
+      if (s.ended) return;
+      toast('Something went wrong… trying again.');
       s.deadline = Date.now() + 3000; // try again in a few seconds
       heartbeat();
       return;
@@ -235,9 +340,24 @@ export default function TakeQuiz() {
     const detail = `Detected: ${s.events.map((e) => `${e.code.replace('_', ' ')} at ${e.at}`).join(', ')}`
       + ` | Time left: ${fmtClock(secondsLeft())} | Answered: ${answeredCount()}/${s.total}`;
     stopAll();
-    beacon('take.terminate', { token: s.token, reason: main, detail });
+    beacon('take.terminate', { token: s.token, reason: main, detail, ...offStats() });
     exitFs();
     showTerminated(main);
+    if (main !== 'page_unload') confirmTermination(main, detail);
+  }
+
+  /** Makes sure the server hears about the termination, even if the internet was down at that moment. */
+  async function confirmTermination(reason, detail) {
+    const s = st.current;
+    for (let i = 0; i < 400; i++) {
+      try {
+        await call('take.terminate', { token: s.token, reason, detail });
+        return;
+      } catch (e) {
+        if (e.status && e.status < 500) return;
+        await waitForNet(5000);
+      }
+    }
   }
 
   function violation(code) {
@@ -261,6 +381,13 @@ export default function TakeQuiz() {
     }
     const l = secondsLeft();
     setLeft(l);
+    if (!s.ended) {
+      const now = Date.now();
+      // Unsent answers: try again every few seconds.
+      if (Object.keys(s.dirty).length && !s.flushing && now - s.lastFlush > (s.offSince ? 4000 : 1500)) flush();
+      // Offline: check for the connection more often than the normal heartbeat.
+      else if (s.offSince && now - s.lastProbe > 5000) fn.current.heartbeat();
+    }
     if (s.mode === 'per_question') {
       if (l <= 5 && l > 0 && s.lastTick !== l) {
         s.lastTick = l;
@@ -281,8 +408,11 @@ export default function TakeQuiz() {
   }
 
   function heartbeat() {
-    if (st.current.ended) return;
-    api('take.heartbeat', { token: st.current.token, index: st.current.pqIndex }).then(handleServerState).catch(() => {});
+    const s = st.current;
+    // While an answer is on its way (per-question mode) that request is the contact with the server.
+    if (s.ended || s.pqSending || s.waiting) return;
+    s.lastProbe = Date.now();
+    call('take.heartbeat', { token: s.token, index: s.pqIndex }).then(handleServerState).catch(() => {});
   }
 
   function onAnswer(qid, value, debounce) {
@@ -291,25 +421,37 @@ export default function TakeQuiz() {
     if (!debounce) sfx.pop();
     s.answers = { ...s.answers, [qid]: value };
     setAnswers(s.answers);
-    clearTimeout(s.saveTimers[qid]);
-    const send = () => api('take.save', { token: s.token, question_id: qid, answer: value }).then(handleServerState).catch(() => {});
-    if (debounce) s.saveTimers[qid] = setTimeout(send, 700);
-    else send();
+    s.dirty[qid] = true;
+    setPending(Object.keys(s.dirty).length);
+    clearTimeout(s.flushTimer);
+    s.flushTimer = setTimeout(() => fn.current.flush(), debounce ? 700 : 0);
   }
 
   async function submit(auto) {
     const s = st.current;
     if (s.ended) return;
     stopAll();
-    setBusy(auto ? "Time's up! Sending your answers…" : 'Sending your answers…');
+    const sending = auto ? "Time's up! Sending your answers…" : 'Sending your answers…';
+    setBusy(sending);
     let res = null;
-    for (let i = 0; i < 4 && !res; i++) {
+    let fails = 0;
+    // Answers are locked now. Without internet they wait on this page and are sent when it comes back.
+    s.waiting = true;
+    while (!res) {
       try {
-        res = await api('take.submit', { token: s.token, auto: auto ? '1' : '0', answers: s.answers });
-      } catch {
-        await sleep(1500);
+        res = await call('take.submit', {
+          token: s.token, auto: auto ? '1' : '0', answers: s.answers, offline: s.offN > 0 ? '1' : '0',
+        });
+      } catch (e) {
+        if (e.status && e.status < 500 && ++fails >= 3) break;
+        if (!e.status) {
+          setBusy('📴 No internet. Your answers are locked in and safe on this page. They will be sent automatically when the connection is back. Do NOT close or reload this page.');
+        }
+        await waitForNet(e.status ? 2000 : 4000);
+        if (!e.status) setBusy(sending);
       }
     }
+    s.waiting = false;
     setBusy('');
     exitFs();
     if (res && res.status === 'terminated') {
@@ -321,7 +463,7 @@ export default function TakeQuiz() {
     showDone(res);
   }
 
-  fn.current = { violation, terminate, submit, tick, heartbeat, nextQuestion };
+  fn.current = { violation, terminate, submit, tick, heartbeat, nextQuestion, flush, markOffline };
 
   /* ---------- load quiz info + check this device's previous attempt ---------- */
   useEffect(() => {
@@ -376,6 +518,21 @@ export default function TakeQuiz() {
     };
     const block = (e) => { if (st.current.monitoring) e.preventDefault(); };
     const blockEvents = ['contextmenu', 'copy', 'cut', 'paste', 'dragstart'];
+    // Internet lost / back: retry at once instead of waiting for the next try.
+    const onOffline = () => { if (st.current.token && !st.current.ended) fn.current.markOffline(); };
+    const onOnline = () => {
+      const s = st.current;
+      if (s.wake) s.wake();
+      if (s.token && !s.ended) { s.lastFlush = 0; fn.current.flush(); fn.current.heartbeat(); }
+    };
+    // Answers still waiting to be sent: ask before the page is closed (they would be lost).
+    const onLeave = (e) => {
+      const s = st.current;
+      if (s.token && (s.waiting || Object.keys(s.dirty).length)) { e.preventDefault(); e.returnValue = ''; }
+    };
+    window.addEventListener('offline', onOffline);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('beforeunload', onLeave);
 
     document.addEventListener('fullscreenchange', onFs);
     document.addEventListener('webkitfullscreenchange', onFs);
@@ -395,6 +552,9 @@ export default function TakeQuiz() {
       window.removeEventListener('beforeunload', onUnload);
       document.removeEventListener('keydown', onKey);
       blockEvents.forEach((ev) => document.removeEventListener(ev, block));
+      window.removeEventListener('offline', onOffline);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('beforeunload', onLeave);
       clearInterval(s.timerId);
       clearInterval(s.hbId);
     };
@@ -460,6 +620,8 @@ export default function TakeQuiz() {
       s.deadline = Date.now() + res.seconds_left * 1000;
       s.total = res.questions.length;
       setLeft(res.seconds_left);
+      // Load every figure now, so the pictures are already here if the internet drops later.
+      res.questions.forEach((q) => { if (q.figure) new Image().src = figureUrl(q.figure); });
     }
     setSession(res);
     setAnswers({});
@@ -524,6 +686,7 @@ export default function TakeQuiz() {
             <div className="muted small">Passing score: {result.passing}%</div>
           </div>
         )}
+        <OfflineReminder />
         <StudentReview token={st.current.token} />
         <p className="muted small">You may now close this tab.</p>
       </Message>
@@ -596,6 +759,7 @@ export default function TakeQuiz() {
             <div className="total-left">total left</div>
           </div>
         </header>
+        <NetBanner net={net} pending={0} waiting={pqWait} />
 
         <main className="pq-stage">
           <div className="pq-top">
@@ -641,7 +805,7 @@ export default function TakeQuiz() {
 
           <div className="pq-next">
             <button className={`btn btn-lg ${hasAnswer ? 'btn-success' : ''}`} disabled={pqSending} onClick={() => { sfx.click(); nextQuestion(false); }}>
-              {pqSending ? 'Saving…' : last ? (hasAnswer ? 'Finish 🏁' : 'Skip & finish 🏁') : (hasAnswer ? 'Next ➜' : 'Skip ➜')}
+              {pqWait ? '📴 Waiting for internet…' : pqSending ? 'Saving…' : last ? (hasAnswer ? 'Finish 🏁' : 'Skip & finish 🏁') : (hasAnswer ? 'Next ➜' : 'Skip ➜')}
             </button>
           </div>
           <p className="center muted small">You can&apos;t go back to a question once you move on.</p>
@@ -676,6 +840,7 @@ export default function TakeQuiz() {
           </button>
           <div className={`timer ${left <= 60 ? 'warn' : ''}`}>⏰ {fmtClock(left)}</div>
         </header>
+        <NetBanner net={net} pending={pending} waiting={false} />
         <main className="quiz-body">
           {qs.map((q, i) => {
             const val = answers[q.id] ?? '';
@@ -790,6 +955,8 @@ export default function TakeQuiz() {
                 <li>⏰ The timer cannot be paused. When time runs out, your answers are submitted automatically.</li>
               )}
               <li>☝️ You can only take this quiz <b>once</b>. Your answers are saved as you go.</li>
+              <li>📶 If your internet drops, <b>keep going</b> — the quiz keeps working and sends your answers when the
+                connection is back. Just <b>don&apos;t close or reload the page</b>. Losing internet is <b>not</b> a valid excuse.</li>
             </ul>
           </div>
 

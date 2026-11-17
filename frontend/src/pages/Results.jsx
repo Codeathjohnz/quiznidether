@@ -126,7 +126,12 @@ export default function Results() {
                     <td><ResultBadge result={a.result} /></td>
                     <td className="reason">
                       {a.status === 'terminated' ? <b className="danger-text">{a.reason_text}</b>
-                        : a.status === 'in_progress' ? <span className="muted">{fmtDuration(a.seconds_left)} left</span>
+                        : a.status === 'in_progress' ? (
+                          <span className="muted">
+                            {fmtDuration(a.seconds_left)} left
+                            {a.no_signal && <span className="badge badge-warn" title={`Last signal: ${fmtDt(a.last_seen)}. The quiz keeps running on the device; answers arrive when it is back online.`}> 📴 No signal</span>}
+                          </span>
+                        )
                         : <span className="muted">{a.submit_note}</span>}
                     </td>
                     <td className="nowrap small">{fmtDt(a.started_at)}</td>

@@ -48,9 +48,13 @@ define('DEVELOPER_EMAILS', env_value('DEVELOPER_EMAILS', 'olaguirdetherjohn@gmai
 // Passing percentage used when a quiz's passing mode is set to "Automatic".
 define('AUTO_PASSING_PERCENT', env_value('AUTO_PASSING_PERCENT', 75));
 
-// If a student's browser stops responding for this many seconds while taking a quiz,
-// the attempt is terminated (covers force-closing the browser / killing the app).
+// A student's device that has not answered for this many seconds is shown as "No signal" in Results.
 define('HEARTBEAT_TIMEOUT', env_value('HEARTBEAT_TIMEOUT', 45));
+
+// Lost internet: the quiz keeps running on the student's device and the answers are sent when the
+// connection returns. The server waits this many seconds after the time ends for that device before it
+// closes the attempt as "Connection lost / browser force-closed" (default 15 minutes).
+define('OFFLINE_GRACE_SECONDS', env_value('OFFLINE_GRACE_SECONDS', 900));
 
 // Extra seconds accepted after the timer ends (network delay).
 define('SUBMIT_GRACE_SECONDS', env_value('SUBMIT_GRACE_SECONDS', 60));

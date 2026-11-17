@@ -78,6 +78,43 @@ function touch_attempt(PDO $db, array $a): void
     $db->prepare("UPDATE attempts SET last_seen = ? WHERE id = ? AND status = 'in_progress'")->execute([now(), $a['id']]);
 }
 
+/** The browser reports how often / how long it was offline (off_n, off_s); kept for the teacher. */
+function record_offline(PDO $db, array $a): void
+{
+    $n = min(10000, max(0, int_in('off_n')));
+    $s = min(86400 * 7, max(0, int_in('off_s')));
+    if (!$n && !$s) return;
+    $db->prepare('UPDATE attempts SET offline_count = GREATEST(offline_count, ?), offline_seconds = GREATEST(offline_seconds, ?) WHERE id = ?')
+       ->execute([$n, $s, $a['id']]);
+}
+
+/** Total of the per-question times from position $from to the end (with the network grace of each). */
+function pq_remaining(array $order, array $times, array $a, int $from): int
+{
+    $sum = 0;
+    for ($i = $from; $i < count($order); $i++) $sum += ($times[$order[$i]] ?? (int)$a['quiz_time_seconds']) + PER_QUESTION_GRACE;
+    return $sum;
+}
+
+/**
+ * Per-question mode: a question that is waiting for the device (question_started_at = NULL, because the
+ * device was offline when the previous one ended) starts now, and the attempt's deadline moves with it.
+ */
+function pq_resume(PDO $db, array $a): array
+{
+    if ($a['status'] !== 'in_progress' || !is_per_question($a) || $a['question_started_at'] !== null) return $a;
+    $order = pq_order($a);
+    $idx = (int)$a['current_index'];
+    if ($idx >= count($order)) {                       // the last question already ended: nothing left to show
+        finish_attempt($db, (int)$a['id'], 'submitted', null, null, 'Time ran out on the last question — auto-submitted');
+        return reload_attempt($db, (int)$a['id']);
+    }
+    $deadline = time() + pq_remaining($order, pq_times($db, $a), $a, $idx);
+    $db->prepare("UPDATE attempts SET question_started_at = ?, deadline = ? WHERE id = ? AND status = 'in_progress'")
+       ->execute([now(), date('Y-m-d H:i:s', $deadline), $a['id']]);
+    return reload_attempt($db, (int)$a['id']);
+}
+
 /* ---------- per-question helpers ---------- */
 
 function pq_order(array $a): array
@@ -98,28 +135,21 @@ function pq_times(PDO $db, array $a): array
 /** Moves past questions whose time ran out while the browser was silent; finishes the attempt after the last one. */
 function pq_sync(PDO $db, array $a): array
 {
-    if ($a['status'] !== 'in_progress' || !is_per_question($a)) return $a;
+    if ($a['status'] !== 'in_progress' || !is_per_question($a) || $a['question_started_at'] === null) return $a;
     $order = pq_order($a);
     $times = pq_times($db, $a);
     $idx = (int)$a['current_index'];
     $start = strtotime((string)$a['question_started_at']);
-    $now = time();
-    $moved = false;
-    while ($idx < count($order)) {
-        $limit = $times[$order[$idx]] ?? (int)$a['quiz_time_seconds'];
-        if ($now <= $start + $limit + PER_QUESTION_GRACE) break;
-        $start += $limit;
-        $idx++;
-        $moved = true;
-    }
-    if ($moved) {
-        $db->prepare("UPDATE attempts SET current_index = ?, question_started_at = ? WHERE id = ? AND status = 'in_progress'")
-           ->execute([$idx, date('Y-m-d H:i:s', $start), $a['id']]);
-    }
-    if ($idx >= count($order)) {
-        finish_attempt($db, (int)$a['id'], 'submitted', null, null, 'Time ran out on the last question — auto-submitted');
-    }
-    return $moved || $idx >= count($order) ? reload_attempt($db, (int)$a['id']) : $a;
+    if ($idx >= count($order)) return $a;
+    $limit = $times[$order[$idx]] ?? (int)$a['quiz_time_seconds'];
+    if (time() <= $start + $limit + PER_QUESTION_GRACE) return $a;
+    // The device did not send this question's answer in time (offline / closed). The question is over,
+    // but the next one waits for the device (question_started_at = NULL): questions the student never saw
+    // do not run out. It starts when the device is back (pq_resume). After the last question the attempt
+    // also waits, so the answer the offline device locked in can still arrive (or the sweep closes it).
+    $db->prepare("UPDATE attempts SET current_index = ?, question_started_at = NULL WHERE id = ? AND status = 'in_progress'")
+       ->execute([$idx + 1, $a['id']]);
+    return reload_attempt($db, (int)$a['id']);
 }
 
 /** The current question for the student (no answers), with its countdown. */
@@ -260,18 +290,30 @@ function h_take_next(PDO $db): void
 {
     $a = load_attempt($db);
     if (!is_per_question($a)) fail('This quiz does not use a timer per question.');
+    record_offline($db, $a);
     $a = pq_sync($db, $a);
     if ($a['status'] !== 'in_progress') out(attempt_payload($a) + ['done' => true]);
 
     $order = pq_order($a);
     $idx = (int)$a['current_index'];
-    if (int_in('question_id') === $order[$idx]) {
+    $qid = int_in('question_id');
+    if ($a['question_started_at'] === null && $idx > 0 && $qid === $order[$idx - 1]) {
+        // The device was offline when its question ended; this is the answer it locked in at that time.
+        $answer = str_in('answer');
+        $has = scalar($db, 'SELECT COUNT(*) FROM attempt_answers WHERE attempt_id = ? AND question_id = ?', [$a['id'], $qid]);
+        if ($answer !== '' && !$has) save_answer($db, $a, $qid, $answer);
+    }
+    $a = pq_resume($db, $a);
+    if ($a['status'] !== 'in_progress') out(attempt_payload($a) + ['done' => true]);
+    if ($qid === $order[$idx]) {
         // Answer belongs to the question that is still open (sync above already closed late ones).
         $answer = str_in('answer');
         if ($answer !== '') save_answer($db, $a, $order[$idx], $answer);
         $idx++;
         $db->prepare("UPDATE attempts SET current_index = ?, question_started_at = ?, last_seen = ? WHERE id = ? AND status = 'in_progress'")
            ->execute([$idx, now(), now(), $a['id']]);
+    } else {
+        touch_attempt($db, $a);
     }
     if ($idx >= count($order)) {
         finish_attempt($db, (int)$a['id'], 'submitted', null, null, 'Answered all questions');
@@ -287,15 +329,25 @@ function h_take_save(PDO $db): void
     if ($a['status'] !== 'in_progress') out(attempt_payload($a));
     if (is_per_question($a)) fail('Answers are sent with each question in this quiz.');
     if (time() > strtotime($a['deadline']) + 30) fail('Time is up.');
-    save_answer($db, $a, int_in('question_id'), str_in('answer'));
+    // One answer (question_id + answer), or many at once (answers: {question_id: answer}) after being offline.
+    $many = input()['answers'] ?? null;
+    if (is_array($many)) {
+        foreach (array_slice($many, 0, 1000, true) as $qid => $ans) {
+            if (is_scalar($ans)) save_answer($db, $a, (int)$qid, (string)$ans);
+        }
+    } else {
+        save_answer($db, $a, int_in('question_id'), str_in('answer'));
+    }
     touch_attempt($db, $a);
+    record_offline($db, $a);
     out(['status' => 'in_progress', 'seconds_left' => max(0, strtotime($a['deadline']) - time())]);
 }
 
 function h_take_heartbeat(PDO $db): void
 {
     $a = load_attempt($db);
-    $a = pq_sync($db, $a);
+    record_offline($db, $a);
+    $a = pq_resume($db, pq_sync($db, $a));
     if ($a['status'] === 'in_progress') touch_attempt($db, $a);
     $p = attempt_payload($a);
     if ($a['status'] === 'in_progress' && is_per_question($a)) {
@@ -316,13 +368,24 @@ function h_take_submit(PDO $db): void
 {
     $a = load_attempt($db);
     if ($a['status'] !== 'in_progress') out(attempt_payload($a));
-    if (!is_per_question($a) && time() <= strtotime($a['deadline']) + SUBMIT_GRACE_SECONDS) {
-        foreach ((array)(input()['answers'] ?? []) as $qid => $ans) {
+    record_offline($db, $a);
+    $deadline = strtotime($a['deadline']);
+    // Answers locked in by a device that was offline when the time ended may arrive later.
+    $offline = bool_in('offline');
+    $lateBy = time() - $deadline;
+    $accept = time() <= $deadline + SUBMIT_GRACE_SECONDS || ($offline && time() <= $deadline + OFFLINE_GRACE_SECONDS);
+    if (!is_per_question($a) && $accept) {
+        foreach (array_slice((array)(input()['answers'] ?? []), 0, 1000, true) as $qid => $ans) {
             if (is_scalar($ans)) save_answer($db, $a, (int)$qid, (string)$ans);
         }
     }
-    $auto = bool_in('auto') || time() > strtotime($a['deadline']);
-    finish_attempt($db, (int)$a['id'], 'submitted', null, null, $auto ? 'Time expired — auto-submitted' : 'Submitted by student');
+    $auto = bool_in('auto') || time() > $deadline;
+    $note = $auto ? 'Time expired — auto-submitted' : 'Submitted by student';
+    if ($offline && $lateBy > SUBMIT_GRACE_SECONDS) {
+        $note .= ' (reached the server ' . fmt_timer($lateBy) . ' after the time ended because the device was offline'
+               . ($accept ? '; answers were locked when the time ended' : '; too late, only answers saved earlier were kept') . ')';
+    }
+    finish_attempt($db, (int)$a['id'], 'submitted', null, null, $note);
     out(attempt_payload(reload_attempt($db, (int)$a['id'])));
 }
 
@@ -330,6 +393,7 @@ function h_take_terminate(PDO $db): void
 {
     $a = load_attempt($db);
     if ($a['status'] !== 'in_progress') out(attempt_payload($a));
+    record_offline($db, $a);
     $reason = str_in('reason');
     if (!isset(TERMINATION_REASONS[$reason])) $reason = 'page_unload';
     finish_attempt($db, (int)$a['id'], 'terminated', $reason, str_in('detail', 1000) ?: null);
