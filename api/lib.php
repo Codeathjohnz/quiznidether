@@ -118,6 +118,7 @@ function attempt_row(array $a): array
         'last_seen' => $a['last_seen'],
         'offline_count' => (int)($a['offline_count'] ?? 0),
         'offline_seconds' => (int)($a['offline_seconds'] ?? 0),
+        'focus_log' => $a['focus_log'] ?? null,
         'ip' => $a['ip'],
         'user_agent' => $a['user_agent'],
     ];

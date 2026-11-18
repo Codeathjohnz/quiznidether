@@ -136,4 +136,6 @@ the `quiz-db` **Terminal** / server SSH and import it with
 | `ALLOWED_EMAIL_DOMAINS` | empty | e.g. `gmail.com,myschool.edu.ph` |
 | `AUTO_PASSING_PERCENT` | `75` | Passing % for "Automatic" mode |
 | `HEARTBEAT_TIMEOUT` | `45` | Seconds of silence before a student shows as "📴 No signal" in Results |
+| `FOCUS_GRACE_SECONDS` | `5` | A pop-up / ad / notification that takes the focus for up to this many seconds is only a warning |
+| `FOCUS_GRACE_TIMES` | `3` | How many such warnings a student gets before losing focus terminates the quiz (0 = strict, no warnings) |
 | `OFFLINE_GRACE_SECONDS` | `900` | After the time ends, how long to wait for an offline device to send its answers before closing the attempt as "no heartbeat" |

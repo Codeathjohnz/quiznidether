@@ -143,6 +143,8 @@ export default function TakeQuiz() {
   const [net, setNet] = useState('online');
   const [pending, setPending] = useState(0);
   const [pqWait, setPqWait] = useState(false);
+  // A short loss of focus (pop-up / ad / notification) that was only a warning: { secs, left }.
+  const [focusWarn, setFocusWarn] = useState(null);
 
   // Mutable proctoring state (read by browser event listeners, so kept outside React state).
   const st = useRef({
@@ -152,7 +154,10 @@ export default function TakeQuiz() {
     // offline handling
     dirty: {}, flushTimer: null, flushing: false, lastFlush: 0, lastProbe: 0,
     offSince: null, offN: 0, offS: 0, waiting: false, wake: null,
+    // short losses of focus
+    blurAt: null, blurClock: '', blurTimer: null, focusLog: [],
   });
+  const focusRule = useRef({ seconds: 5, times: 3 }); // from the server (FOCUS_GRACE_SECONDS / _TIMES)
   const reasons = useRef({});
   const fn = useRef({});
 
@@ -168,6 +173,7 @@ export default function TakeQuiz() {
     clearInterval(s.hbId);
     clearTimeout(s.vTimer);
     clearTimeout(s.flushTimer);
+    clearTimeout(s.blurTimer);
     setSubmitOpen(false);
   }
 
@@ -176,7 +182,7 @@ export default function TakeQuiz() {
   function offStats() {
     const s = st.current;
     const now = s.offSince ? (Date.now() - s.offSince) / 1000 : 0;
-    return { off_n: s.offN, off_s: Math.round(s.offS + now) };
+    return { off_n: s.offN, off_s: Math.round(s.offS + now), focus_log: s.focusLog.join('; ').slice(0, 500) };
   }
   function markOffline() {
     const s = st.current;
@@ -338,7 +344,8 @@ export default function TakeQuiz() {
     const codes = s.events.map((e) => e.code);
     const main = PRIORITY.find((p) => codes.includes(p)) || codes[0] || 'page_unload';
     const detail = `Detected: ${s.events.map((e) => `${e.code.replace('_', ' ')} at ${e.at}`).join(', ')}`
-      + ` | Time left: ${fmtClock(secondsLeft())} | Answered: ${answeredCount()}/${s.total}`;
+      + ` | Time left: ${fmtClock(secondsLeft())} | Answered: ${answeredCount()}/${s.total}`
+      + (s.focusLog.length ? ` | Focus lost: ${s.focusLog.join('; ')}` : '');
     stopAll();
     beacon('take.terminate', { token: s.token, reason: main, detail, ...offStats() });
     exitFs();
@@ -360,6 +367,42 @@ export default function TakeQuiz() {
     }
   }
 
+  /**
+   * The quiz window lost focus. Pop-ups, ads and Windows notifications do this too, so a short loss of
+   * focus is only a warning (a few times). Away too long, or too often, terminates like Alt+Tab.
+   * Leaving full screen, switching tabs or minimizing still terminate at once (other events).
+   */
+  function lostFocus() {
+    const s = st.current;
+    if (!s.monitoring || s.ended || s.blurAt) return;
+    const rule = focusRule.current;
+    if (!rule.seconds || s.focusLog.length >= rule.times) {
+      violation('window_blur');
+      return;
+    }
+    s.blurAt = Date.now();
+    s.blurClock = new Date().toLocaleTimeString();
+    s.blurTimer = setTimeout(() => {
+      if (!s.blurAt || s.ended) return;
+      s.focusLog.push(`${s.blurClock} (away more than ${rule.seconds}s)`);
+      s.blurAt = null;
+      violation('window_blur');
+    }, rule.seconds * 1000);
+  }
+
+  function gotFocus() {
+    const s = st.current;
+    if (!s.blurAt) return;
+    clearTimeout(s.blurTimer);
+    const secs = Math.max(0.1, (Date.now() - s.blurAt) / 1000).toFixed(1);
+    s.blurAt = null;
+    if (s.ended) return;
+    s.focusLog.push(`${s.blurClock} (${secs}s)`);
+    setFocusWarn({ secs, left: focusRule.current.times - s.focusLog.length });
+    sfx.buzz();
+    heartbeat(); // the teacher sees it right away
+  }
+
   function violation(code) {
     const s = st.current;
     if (!s.monitoring || s.ended) return;
@@ -373,6 +416,7 @@ export default function TakeQuiz() {
 
   function tick() {
     const s = st.current;
+    if (s.blurAt && document.hasFocus()) gotFocus();
     if (s.monitoring && !s.ended) {
       if (hasSecondScreen()) fn.current.violation('second_screen');
       // A few seconds in a row, so a short resize while entering full screen is not counted.
@@ -463,7 +507,7 @@ export default function TakeQuiz() {
     showDone(res);
   }
 
-  fn.current = { violation, terminate, submit, tick, heartbeat, nextQuestion, flush, markOffline };
+  fn.current = { violation, terminate, submit, tick, heartbeat, nextQuestion, flush, markOffline, lostFocus, gotFocus };
 
   /* ---------- load quiz info + check this device's previous attempt ---------- */
   useEffect(() => {
@@ -474,6 +518,7 @@ export default function TakeQuiz() {
         trackVisit('student', `/take/${code}`);
         setInfo(r.quiz);
         reasons.current = r.reasons;
+        if (r.focus) focusRule.current = r.focus;
         let prior = null;
         try { prior = localStorage.getItem(storeKey); } catch { /* ignore */ }
         if (!prior) return setView('landing');
@@ -505,7 +550,8 @@ export default function TakeQuiz() {
     const v = (c) => () => fn.current.violation(c);
     const onFs = () => { if (st.current.fsRequired && !fsElement()) fn.current.violation('fullscreen_exit'); };
     const onVis = () => { if (document.hidden) fn.current.violation('tab_hidden'); };
-    const onBlur = v('window_blur');
+    const onBlur = () => fn.current.lostFocus();
+    const onFocus = () => fn.current.gotFocus();
     const onUnload = v('page_unload');
     const onKey = (e) => {
       if (!st.current.monitoring) return;
@@ -538,6 +584,7 @@ export default function TakeQuiz() {
     document.addEventListener('webkitfullscreenchange', onFs);
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
     window.addEventListener('pagehide', onUnload);
     window.addEventListener('beforeunload', onUnload);
     document.addEventListener('keydown', onKey);
@@ -548,6 +595,7 @@ export default function TakeQuiz() {
       document.removeEventListener('webkitfullscreenchange', onFs);
       document.removeEventListener('visibilitychange', onVis);
       window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
       window.removeEventListener('pagehide', onUnload);
       window.removeEventListener('beforeunload', onUnload);
       document.removeEventListener('keydown', onKey);
@@ -810,6 +858,20 @@ export default function TakeQuiz() {
           </div>
           <p className="center muted small">You can&apos;t go back to a question once you move on.</p>
         </main>
+        <Modal open={!!focusWarn}>
+          <div className="center">
+            <Mascot mood="think" size={90} />
+            <h2>⚠️ Your quiz lost focus</h2>
+            <p>Something took the focus away from the quiz for <b>{focusWarn?.secs}s</b> — a pop-up, an ad or a notification?
+              This was recorded for your teacher.</p>
+            <p className={focusWarn?.left > 0 ? 'muted' : 'danger-text'}>
+              {focusWarn?.left > 0
+                ? `You have ${focusWarn.left} warning${focusWarn.left === 1 ? '' : 's'} left. Close pop-ups and turn on Do Not Disturb.`
+                : 'No warnings left: next time the quiz will be terminated.'}
+            </p>
+            <button type="button" className="btn btn-primary" onClick={() => setFocusWarn(null)}>OK, continue</button>
+          </div>
+        </Modal>
         {busy && <div className="overlay"><Mascot mood="think" size={110} /><BouncyLoader /><p>{busy}</p></div>}
       </div>
     );
@@ -882,6 +944,20 @@ export default function TakeQuiz() {
           </div>
         </main>
 
+        <Modal open={!!focusWarn}>
+          <div className="center">
+            <Mascot mood="think" size={90} />
+            <h2>⚠️ Your quiz lost focus</h2>
+            <p>Something took the focus away from the quiz for <b>{focusWarn?.secs}s</b> — a pop-up, an ad or a notification?
+              This was recorded for your teacher.</p>
+            <p className={focusWarn?.left > 0 ? 'muted' : 'danger-text'}>
+              {focusWarn?.left > 0
+                ? `You have ${focusWarn.left} warning${focusWarn.left === 1 ? '' : 's'} left. Close pop-ups and turn on Do Not Disturb.`
+                : 'No warnings left: next time the quiz will be terminated.'}
+            </p>
+            <button type="button" className="btn btn-primary" onClick={() => setFocusWarn(null)}>OK, continue</button>
+          </div>
+        </Modal>
         <Modal open={submitOpen}>
           <Mascot mood={unanswered ? 'think' : 'cheer'} size={110} />
           <h2 style={{ color: 'var(--primary-dark)' }}>Ready to submit?</h2>
@@ -945,6 +1021,9 @@ export default function TakeQuiz() {
               <li>🖥️ The quiz opens in <b>full screen</b>. Stay in full screen until you submit.</li>
               <li>🚫 <b>Do not</b> press <kbd>Esc</kbd> / <kbd>F11</kbd>, switch tabs, open a new tab, use <kbd>Alt</kbd>+<kbd>Tab</kbd>, minimize,
                 click outside the browser, reload, or close the window (<b>X</b>).</li>
+              <li>🔕 <b>Before you start:</b> turn on <b>Do Not Disturb</b> (Windows: click the 🔔 / clock at the bottom right),
+                close other apps and ad pop-ups. If a pop-up still takes the focus, click back on the quiz <b>right away</b>
+                — a few seconds are only a warning, but staying away or it happening many times ends the quiz.</li>
               <li>🖥️ Use <b>one screen only</b>. A second monitor is not allowed, and the quiz window must fill the whole screen
                 (no split screen or snapped windows).</li>
               <li>💥 Doing any of these will <b>immediately terminate</b> your quiz, and your teacher will see the exact reason.</li>

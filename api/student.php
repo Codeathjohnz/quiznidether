@@ -83,6 +83,11 @@ function record_offline(PDO $db, array $a): void
 {
     $n = min(10000, max(0, int_in('off_n')));
     $s = min(86400 * 7, max(0, int_in('off_s')));
+    // Short losses of focus the browser allowed (e.g. "10:02:15 AM (1.2s); 10:05:40 AM (3s)").
+    $focus = str_in('focus_log', 500);
+    if ($focus !== '') {
+        $db->prepare('UPDATE attempts SET focus_log = ? WHERE id = ?')->execute([$focus, $a['id']]);
+    }
     if (!$n && !$s) return;
     $db->prepare('UPDATE attempts SET offline_count = GREATEST(offline_count, ?), offline_seconds = GREATEST(offline_seconds, ?) WHERE id = ?')
        ->execute([$n, $s, $a['id']]);
@@ -220,6 +225,7 @@ function h_take_info(PDO $db): void
             'is_open' => (bool)$q['is_open'],
         ],
         'reasons' => TERMINATION_REASONS,
+        'focus' => ['seconds' => max(0, (int)FOCUS_GRACE_SECONDS), 'times' => max(0, (int)FOCUS_GRACE_TIMES)],
     ]);
 }
 

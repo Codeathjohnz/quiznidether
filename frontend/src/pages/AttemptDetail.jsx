@@ -57,6 +57,11 @@ export default function AttemptDetail() {
               : <span className="muted">No connection problems reported</span>}
             {a.no_signal && <> · <span className="badge badge-warn">No signal since {fmtDt(a.last_seen)}</span></>}
           </dd></div>
+          <div><dt>Focus lost</dt><dd>
+            {a.focus_log
+              ? <>⚠️ {a.focus_log} <span className="muted small">(short losses of focus — pop-up, ad or notification? — that were only warnings)</span></>
+              : <span className="muted">None</span>}
+          </dd></div>
           <div><dt>Device</dt><dd className="small muted">{a.ip} · {a.user_agent}{a.client_note && <><br />{a.client_note}</>}</dd></div>
         </dl>
       </section>

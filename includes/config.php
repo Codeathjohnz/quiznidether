@@ -51,6 +51,12 @@ define('AUTO_PASSING_PERCENT', env_value('AUTO_PASSING_PERCENT', 75));
 // A student's device that has not answered for this many seconds is shown as "No signal" in Results.
 define('HEARTBEAT_TIMEOUT', env_value('HEARTBEAT_TIMEOUT', 45));
 
+// Pop-ups / ads / Windows notifications can take the focus away from the quiz for a moment.
+// A short loss of focus (up to FOCUS_GRACE_SECONDS) is only a warning, at most FOCUS_GRACE_TIMES times;
+// longer or more often terminates the quiz. Set FOCUS_GRACE_TIMES to 0 to terminate on any loss of focus.
+define('FOCUS_GRACE_SECONDS', env_value('FOCUS_GRACE_SECONDS', 5));
+define('FOCUS_GRACE_TIMES', env_value('FOCUS_GRACE_TIMES', 3));
+
 // Lost internet: the quiz keeps running on the student's device and the answers are sent when the
 // connection returns. The server waits this many seconds after the time ends for that device before it
 // closes the attempt as "Connection lost / browser force-closed" (default 15 minutes).
